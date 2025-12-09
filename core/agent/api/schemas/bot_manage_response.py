@@ -31,5 +31,3 @@ def build_bot_response(
     """
 
     return BotResponse(code=error.c, message=message or error.m, data=data)
-
-
