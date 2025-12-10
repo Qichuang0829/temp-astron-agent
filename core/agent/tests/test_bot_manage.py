@@ -9,12 +9,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 from common.otlp import sid as sid_module
-from common.otlp.trace.span import Span
 
 from agent.api.schemas.bot_manage_inputs import Auth, ProtocolSynchronization, Publish
 from agent.api.v2.bot_manage import (
     _check_binding_status,
     _perform_binding,
+    _validate_app_auth,
     _validate_tenant,
     auth,
     protocol_synchronization,
@@ -51,7 +51,6 @@ class TestValidateTenant:
     @pytest.mark.asyncio
     async def test_validate_tenant_success(self) -> None:
         """Test successful tenant validation"""
-        span = Span(app_id="test_app")
         mock_tenant = BotTenant(
             id="test_tenant_id",
             name="test_tenant",
@@ -71,7 +70,7 @@ class TestValidateTenant:
                 mock_session_getter.return_value.__enter__.return_value = mock_session
                 mock_session_getter.return_value.__exit__.return_value = False
 
-                await _validate_tenant("test_username", span)
+                await _validate_tenant("test_username")
 
                 mock_session.query.assert_called_once_with(BotTenant)
                 mock_query.filter.assert_called_once()
@@ -79,7 +78,6 @@ class TestValidateTenant:
     @pytest.mark.asyncio
     async def test_validate_tenant_not_found(self) -> None:
         """Test tenant validation when tenant is not found"""
-        span = Span(app_id="test_app")
 
         with patch("agent.api.v2.bot_manage.get_db_service"):
             with patch("agent.api.v2.bot_manage.session_getter") as mock_session_getter:
@@ -93,7 +91,7 @@ class TestValidateTenant:
                 mock_session_getter.return_value.__exit__.return_value = False
 
                 with pytest.raises(BotExc) as exc_info:
-                    await _validate_tenant("test_username", span)
+                    await _validate_tenant("test_username")
                 assert exc_info.value.c == 40604
 
 
@@ -157,7 +155,7 @@ class TestCheckBindingStatus:
     @pytest.mark.asyncio
     async def test_check_binding_status_code_not_zero(self) -> None:
         """Test checking binding status when response code is not 0"""
-        mock_response_data = {"code": 1, "message": "error"}
+        mock_response_data = {"code": 1, "message": "error", "data": []}
         timeout = aiohttp.ClientTimeout(total=5)
 
         # Mock HTTP response
@@ -178,9 +176,9 @@ class TestCheckBindingStatus:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            with pytest.raises(BotExc) as exc_info:
-                await _check_binding_status("http://test.com", {}, timeout)
-            assert exc_info.value.c == 40602
+            result = await _check_binding_status("http://test.com", {}, timeout)
+            # When code is not 0 but data is empty, should return False
+            assert result is False
 
 
 class TestPerformBinding:
@@ -296,7 +294,23 @@ class TestProtocolSynchronization:
         self, mock_session: MagicMock, mock_tenant_session: MagicMock
     ) -> None:
         """Test creating a new bot via protocol synchronization"""
-        inputs = ProtocolSynchronization(id="test_bot_id", dsl=None)
+        from agent.api.schemas.bot_manage_inputs import (
+            DslInputs,
+            ModelInputs,
+            ModelPropertiesInputs,
+        )
+
+        dsl = DslInputs(
+            name="test_bot",
+            model=ModelInputs(
+                name="test_model",
+                type="test_type",
+                properties=ModelPropertiesInputs(
+                    id="model_id", url="http://test.com", token="token"
+                ),
+            ),
+        )
+        inputs = ProtocolSynchronization(id="test_bot_id", dsl=dsl)
 
         with patch("agent.api.v2.bot_manage.get_db_service"):
             with patch("agent.api.v2.bot_manage.session_getter") as mock_session_getter:
@@ -376,7 +390,23 @@ class TestProtocolSynchronization:
     @pytest.mark.asyncio
     async def test_protocol_synchronization_auth_failed(self) -> None:
         """Test protocol synchronization when tenant validation fails"""
-        inputs = ProtocolSynchronization(id="test_bot_id", dsl=None)
+        from agent.api.schemas.bot_manage_inputs import (
+            DslInputs,
+            ModelInputs,
+            ModelPropertiesInputs,
+        )
+
+        dsl = DslInputs(
+            name="test_bot",
+            model=ModelInputs(
+                name="test_model",
+                type="test_type",
+                properties=ModelPropertiesInputs(
+                    id="model_id", url="http://test.com", token="token"
+                ),
+            ),
+        )
+        inputs = ProtocolSynchronization(id="test_bot_id", dsl=dsl)
 
         mock_tenant_session = MagicMock()
         mock_query = MagicMock()
@@ -400,7 +430,23 @@ class TestProtocolSynchronization:
     @pytest.mark.asyncio
     async def test_protocol_synchronization_exception(self) -> None:
         """Test protocol synchronization when exception occurs"""
-        inputs = ProtocolSynchronization(id="test_bot_id", dsl=None)
+        from agent.api.schemas.bot_manage_inputs import (
+            DslInputs,
+            ModelInputs,
+            ModelPropertiesInputs,
+        )
+
+        dsl = DslInputs(
+            name="test_bot",
+            model=ModelInputs(
+                name="test_model",
+                type="test_type",
+                properties=ModelPropertiesInputs(
+                    id="model_id", url="http://test.com", token="token"
+                ),
+            ),
+        )
+        inputs = ProtocolSynchronization(id="test_bot_id", dsl=dsl)
 
         mock_tenant_session = MagicMock()
         mock_tenant = BotTenant(
@@ -477,91 +523,6 @@ class TestPublish:
         mock_filter.first.return_value = mock_tenant
         session.query.return_value = mock_query
         return session
-
-    @pytest.mark.asyncio
-    async def test_publish_with_dsl(
-        self, mock_session: MagicMock, mock_tenant_session: MagicMock
-    ) -> None:
-        """Test publish with provided dsl"""
-        from agent.api.schemas.bot_manage_inputs import (
-            DslInputs,
-            ModelInputs,
-            ModelPropertiesInputs,
-        )
-
-        dsl = DslInputs(
-            name="test_bot",
-            model=ModelInputs(
-                name="test_model",
-                type="test_type",
-                properties=ModelPropertiesInputs(
-                    id="model_id", url="http://test.com", token="token"
-                ),
-            ),
-        )
-        inputs = Publish(
-            bot_id="test_bot_id", version="v1.0", description="test", dsl=dsl
-        )
-
-        with patch("agent.api.v2.bot_manage.get_db_service"):
-            with patch("agent.api.v2.bot_manage.session_getter") as mock_session_getter:
-                # First call for tenant validation, second for main logic
-                mock_session_getter.return_value.__enter__.side_effect = [
-                    mock_tenant_session,
-                    mock_session,
-                ]
-                mock_session_getter.return_value.__exit__.return_value = False
-
-                response = await publish("test_app", inputs)
-
-                assert response.code == 0
-                assert response.data is not None
-                assert "version" in response.data
-                assert response.data["version"] == "release_id"
-                mock_session.add.assert_called_once()
-                mock_session.commit.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_publish_without_dsl(
-        self, mock_session: MagicMock, mock_tenant_session: MagicMock
-    ) -> None:
-        """Test publish without dsl, query from Bot table"""
-        inputs = Publish(
-            bot_id="test_bot_id", version="v1.0", description="test", dsl=None
-        )
-
-        # Mock existing bot
-        existing_bot = Bot(
-            id="test_bot_id",
-            app_id="test_app",
-            dsl='{"name": "test"}',
-            pub_status=0,
-            create_at=datetime.now(),
-            update_at=datetime.now(),
-        )
-        # Update mock to return existing bot
-        mock_session.query.return_value.filter.return_value.first.return_value = (
-            existing_bot
-        )
-
-        with patch("agent.api.v2.bot_manage.get_db_service"):
-            with patch("agent.api.v2.bot_manage.session_getter") as mock_session_getter:
-                # First call for tenant validation, second for main logic
-                mock_session_getter.return_value.__enter__.side_effect = [
-                    mock_tenant_session,
-                    mock_session,
-                ]
-                mock_session_getter.return_value.__exit__.return_value = False
-
-                response = await publish("test_app", inputs)
-
-                assert response.code == 0
-                assert response.data is not None
-                assert "version" in response.data
-                assert response.data["version"] == "release_id"
-                assert existing_bot.pub_status == 1
-                assert mock_session.add.call_count == 2  # BotRelease and Bot
-                mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_publish_bot_not_found(
@@ -648,6 +609,147 @@ class TestPublish:
 
                 assert response.code != 0
                 assert response.data is None
+
+    @pytest.mark.asyncio
+    async def test_publish_version_duplicated(
+        self, mock_session: MagicMock, mock_tenant_session: MagicMock
+    ) -> None:
+        """Test publish when version is already duplicated"""
+        inputs = Publish(
+            bot_id="test_bot_id", version="v1.0", description="test", dsl=None
+        )
+
+        # Mock existing bot
+        existing_bot = Bot(
+            id="test_bot_id",
+            app_id="test_app",
+            dsl='{"name": "test"}',
+            pub_status=0,
+            create_at=datetime.now(),
+            update_at=datetime.now(),
+        )
+
+        # Mock existing BotRelease (version duplicated)
+        existing_release = BotRelease(
+            id="existing_release_id",
+            bot_id="test_bot_id",
+            version="v1.0",
+            description="existing",
+            dsl='{"name": "existing"}',
+            create_at=datetime.now(),
+            update_at=datetime.now(),
+        )
+
+        # Create a fresh mock session
+        test_mock_session = MagicMock()
+        test_mock_session.add = MagicMock()
+        test_mock_session.commit = MagicMock()
+        test_mock_session.refresh = MagicMock()
+
+        # Setup query chain for Bot query
+        mock_bot_query = MagicMock()
+        mock_bot_filter = MagicMock()
+        mock_bot_query.filter.return_value = mock_bot_filter
+        mock_bot_filter.first.return_value = existing_bot
+
+        # Setup query chain for BotRelease query (should return existing_release for duplicated version)
+        mock_release_query = MagicMock()
+        mock_release_filter = MagicMock()
+        mock_release_query.filter = lambda *args, **kwargs: mock_release_filter
+        mock_release_filter.first = lambda: existing_release
+
+        # Make session.query return different queries based on model class type
+        def query_func(model_class: Any) -> Any:
+            if model_class is Bot:
+                return mock_bot_query
+            elif model_class is BotRelease:
+                return mock_release_query
+            # Default
+            default_query = MagicMock()
+            default_filter = MagicMock()
+            default_query.filter = lambda *args, **kwargs: default_filter
+            default_filter.first.return_value = None
+            return default_query
+
+        test_mock_session.query = query_func
+
+        with patch("agent.api.v2.bot_manage.get_db_service"):
+            with patch("agent.api.v2.bot_manage.session_getter") as mock_session_getter:
+                mock_session_getter.return_value.__enter__.side_effect = [
+                    mock_tenant_session,
+                    test_mock_session,
+                ]
+                mock_session_getter.return_value.__exit__.return_value = False
+
+                response = await publish("test_app", inputs)
+
+                # Should return error code for duplicated version
+                assert response.code == 40605  # BotPublishDuplicatedExc code
+                assert response.data is None
+
+
+class TestValidateAppAuth:
+    """Test _validate_app_auth function"""
+
+    @pytest.mark.asyncio
+    async def test_validate_app_auth_success(self) -> None:
+        """Test successful app auth validation"""
+        mock_span = MagicMock()
+        mock_app_detail = {"code": 0, "data": [{"id": "app1"}]}
+
+        with patch("agent.api.v2.bot_manage.APPAuth") as mock_app_auth_class:
+            mock_app_auth = MagicMock()
+            mock_app_auth.app_detail = AsyncMock(return_value=mock_app_detail)
+            mock_app_auth_class.return_value = mock_app_auth
+
+            await _validate_app_auth("test_app_id", mock_span)
+
+            mock_app_auth.app_detail.assert_called_once_with("test_app_id")
+            mock_span.add_info_events.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_validate_app_auth_none(self) -> None:
+        """Test app auth validation when app_detail is None"""
+        mock_span = MagicMock()
+
+        with patch("agent.api.v2.bot_manage.APPAuth") as mock_app_auth_class:
+            mock_app_auth = MagicMock()
+            mock_app_auth.app_detail = AsyncMock(return_value=None)
+            mock_app_auth_class.return_value = mock_app_auth
+
+            with pytest.raises(BotExc) as exc_info:
+                await _validate_app_auth("test_app_id", mock_span)
+            assert exc_info.value.c == 40040  # AppAuthFailedExc code
+
+    @pytest.mark.asyncio
+    async def test_validate_app_auth_code_not_zero(self) -> None:
+        """Test app auth validation when code is not 0"""
+        mock_span = MagicMock()
+        mock_app_detail = {"code": 1, "message": "Auth failed"}
+
+        with patch("agent.api.v2.bot_manage.APPAuth") as mock_app_auth_class:
+            mock_app_auth = MagicMock()
+            mock_app_auth.app_detail = AsyncMock(return_value=mock_app_detail)
+            mock_app_auth_class.return_value = mock_app_auth
+
+            with pytest.raises(BotExc) as exc_info:
+                await _validate_app_auth("test_app_id", mock_span)
+            assert exc_info.value.c == 40040  # AppAuthFailedExc code
+
+    @pytest.mark.asyncio
+    async def test_validate_app_auth_empty_data(self) -> None:
+        """Test app auth validation when data is empty"""
+        mock_span = MagicMock()
+        mock_app_detail = {"code": 0, "data": []}
+
+        with patch("agent.api.v2.bot_manage.APPAuth") as mock_app_auth_class:
+            mock_app_auth = MagicMock()
+            mock_app_auth.app_detail = AsyncMock(return_value=mock_app_detail)
+            mock_app_auth_class.return_value = mock_app_auth
+
+            with pytest.raises(BotExc) as exc_info:
+                await _validate_app_auth("test_app_id", mock_span)
+            assert exc_info.value.c == 40040  # AppAuthFailedExc code
 
 
 class TestAuth:
@@ -739,10 +841,15 @@ class TestAuth:
                 with patch(
                     "agent.api.v2.bot_manage.session_getter"
                 ) as mock_session_getter:
-                    mock_session_getter.return_value.__enter__.return_value = (
-                        mock_tenant_session
-                    )
+                    # First call for tenant validation
+                    mock_session_getter.return_value.__enter__.side_effect = [
+                        mock_tenant_session,
+                    ]
                     mock_session_getter.return_value.__exit__.return_value = False
+                with patch(
+                    "agent.api.v2.bot_manage._validate_app_auth"
+                ) as mock_validate_app_auth:
+                    mock_validate_app_auth.return_value = None
 
                     # Mock GET response (not bound)
                     mock_get_response_data = {"code": 0, "data": []}

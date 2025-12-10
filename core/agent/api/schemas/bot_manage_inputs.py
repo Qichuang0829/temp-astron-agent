@@ -141,8 +141,8 @@ class DslInputs(BaseModel):
 
 
 class ProtocolSynchronization(BaseModel):
-    id: str = Field(...)
-    dsl: Optional[DslInputs] = Field(default=None)
+    id: Optional[str] = Field(default=None)
+    dsl: DslInputs = Field(...)
 
 
 class Publish(BaseModel):

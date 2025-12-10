@@ -13,19 +13,22 @@ from agent.api.schemas.bot_manage_inputs import Auth, ProtocolSynchronization, P
 from agent.api.schemas.bot_manage_response import BotResponse, build_bot_response
 from agent.domain.models.bot import Bot, BotRelease, BotTenant
 from agent.exceptions.bot_exc import (
+    AppAuthFailedExc,
     BotAuthFailedExc,
     BotExc,
     BotNotFoundExc,
     BotProtocolSynchronizationFailedExc,
+    BotPublishDuplicatedExc,
     BotPublishFailedExc,
     TenantNotFoundExc,
 )
 from agent.exceptions.codes import c_0
+from agent.infra.app_auth import APPAuth
 
 bot_manage_router = APIRouter()
 
 
-async def _validate_tenant(x_consumer_username: str, sp: Span) -> None:
+async def _validate_tenant(x_consumer_username: str) -> None:
     """Validate tenant information"""
     with session_getter(get_db_service()) as session:
         # Query if the record exists by x_consumer_username
@@ -40,6 +43,17 @@ async def _validate_tenant(x_consumer_username: str, sp: Span) -> None:
             )
 
 
+async def _validate_app_auth(app_id: str, sp: Span) -> None:
+    app_detail = await APPAuth().app_detail(app_id)
+    sp.add_info_events({"kong-app-detail": json.dumps(app_detail, ensure_ascii=False)})
+    if app_detail is None:
+        raise AppAuthFailedExc(f"Cannot find appid:{app_id} authentication information")
+    if app_detail.get("code") != 0:
+        raise AppAuthFailedExc(app_detail.get("message", ""))
+    if len(app_detail.get("data", [])) == 0:
+        raise AppAuthFailedExc(f"Cannot find appid:{app_id} authentication information")
+
+
 async def _check_binding_status(
     auth_get_api_url: str, params: dict, timeout: aiohttp.ClientTimeout
 ) -> bool:
@@ -50,14 +64,15 @@ async def _check_binding_status(
         ) as response:
             response.raise_for_status()
             result = await response.json()
-
-            if result.get("code") != 0:
+            if response.status != 200:
                 raise BotAuthFailedExc(
                     f"Failed to query binding status from third-party, "
-                    f"code={result.get('code')}, message={result.get('message', '')}"
+                    f"code={response.status}"
                 )
+            if len(result.get("data", [])) > 0:
+                return True
 
-            return result.get("data") and len(result.get("data", [])) > 0
+            return False
 
 
 async def _perform_binding(
@@ -73,11 +88,16 @@ async def _perform_binding(
         ) as response:
             response.raise_for_status()
             result = await response.json()
+            if response.status != 200:
+                raise BotAuthFailedExc(
+                    f"Failed to exec binding from third-party, "
+                    f"code={response.status}"
+                )
 
-            if result.get("code") == 0:
-                return
-            else:
+            if result.get("code") != 0:
                 raise BotAuthFailedExc(result.get("message", "Binding failed"))
+
+            return
 
 
 @bot_manage_router.post("/bot")  # type: ignore[misc]
@@ -91,7 +111,6 @@ async def protocol_synchronization(
     )
     with span.start("ProtocolSynchronization") as sp:
         try:
-            sp.set_attribute("id", inputs.id)
             sp.add_info_events(
                 {
                     "protocol-synchronization-inputs": inputs.model_dump_json(
@@ -100,28 +119,24 @@ async def protocol_synchronization(
                 }
             )
 
-            await _validate_tenant(x_consumer_username, sp)
+            await _validate_tenant(x_consumer_username)
             with session_getter(get_db_service()) as session:
+                dsl_json = json.dumps(
+                    inputs.dsl.model_dump(exclude_none=True), ensure_ascii=False
+                )
                 # Query if the record exists by id
-                existing_bot = session.query(Bot).filter(Bot.id == inputs.id).first()
-
-                # Convert dsl object to JSON string
-                dsl_json = (
-                    json.dumps(
-                        inputs.dsl.model_dump(exclude_none=True), ensure_ascii=False
-                    )
-                    if inputs.dsl
+                existing_bot = (
+                    session.query(Bot).filter(Bot.id == inputs.id).first()
+                    if inputs.id
                     else None
                 )
 
                 # Use x_consumer_username as app_id
                 app_id = x_consumer_username
                 current_time = datetime.now()
-
                 if existing_bot:
                     # If record exists, update the data
-                    if dsl_json:
-                        existing_bot.dsl = dsl_json
+                    existing_bot.dsl = dsl_json
                     existing_bot.app_id = app_id
                     existing_bot.update_at = current_time
                     session.add(existing_bot)
@@ -134,7 +149,7 @@ async def protocol_synchronization(
                     new_bot = Bot(
                         id=inputs.id,
                         app_id=app_id,
-                        dsl=dsl_json or "",
+                        dsl=dsl_json,
                         pub_status=0,  # Default status is draft
                         create_at=current_time,
                         update_at=current_time,
@@ -179,10 +194,27 @@ async def publish(
                 {"publish-inputs": inputs.model_dump_json(by_alias=True)}
             )
 
-            await _validate_tenant(x_consumer_username, sp)
+            await _validate_tenant(x_consumer_username)
             with session_getter(get_db_service()) as session:
-                current_time = datetime.now()
+                # Query Bot table data using bot_id
+                bot = session.query(Bot).filter(Bot.id == inputs.bot_id).first()
+                if not bot:
+                    raise BotNotFoundExc(f"Bot with id {inputs.bot_id} not found")
 
+                bot_version = (
+                    session.query(BotRelease)
+                    .filter(
+                        BotRelease.bot_id == inputs.bot_id,
+                        BotRelease.version == inputs.version,
+                    )
+                    .first()
+                )
+                if bot_version:
+                    raise BotPublishDuplicatedExc(
+                        f"Bot publish bot id:{inputs.bot_id} version:{inputs.version} duplicated"
+                    )
+
+                current_time = datetime.now()
                 # Check if dsl field is provided
                 if inputs.dsl is not None:
                     # If dsl is provided, use the user-provided dsl to create BotRelease
@@ -205,12 +237,6 @@ async def publish(
 
                     return build_bot_response(error, {"version": bot_release.id})
                 else:
-                    # If dsl is not provided, query Bot table data using bot_id
-                    bot = session.query(Bot).filter(Bot.id == inputs.bot_id).first()
-
-                    if not bot:
-                        raise BotNotFoundExc(f"Bot with id {inputs.bot_id} not found")
-
                     # Create BotRelease using dsl from Bot table
                     bot_release = BotRelease(
                         bot_id=inputs.bot_id,
@@ -266,7 +292,8 @@ async def auth(
             sp.set_attribute("app_id", inputs.app_id)
             sp.add_info_events({"auth-inputs": inputs.model_dump_json(by_alias=True)})
 
-            await _validate_tenant(x_consumer_username, sp)
+            await _validate_tenant(x_consumer_username)
+            await _validate_app_auth(inputs.app_id, sp)
             # Build query parameters
             params = {
                 "app_id": inputs.app_id,

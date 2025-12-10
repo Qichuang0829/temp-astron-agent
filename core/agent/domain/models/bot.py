@@ -9,7 +9,7 @@ class Bot(SQLModel, table=True):  # type: ignore[valid-type,misc]
     __tablename__ = "bot"
 
     id: str = Field(
-        default_factory=lambda: get_id, primary_key=True, description="主键id、雪花id"
+        default_factory=get_id, primary_key=True, description="主键id、雪花id"
     )
     app_id: str = Field(..., description="租户应用标识")
     dsl: str = Field(..., description="助手编排协议")
@@ -22,7 +22,7 @@ class BotTenant(SQLModel, table=True):  # type: ignore[valid-type,misc]
     __tablename__ = "bot_tenant"
 
     id: str = Field(
-        default_factory=lambda: get_id, primary_key=True, description="主键id、雪花id"
+        default_factory=get_id, primary_key=True, description="主键id、雪花id"
     )
     name: str = Field(..., max_length=64, description="应用名")
     alias_id: str = Field(..., max_length=32, unique=True, description="应用标识id")
@@ -43,7 +43,7 @@ class BotRelease(SQLModel, table=True):  # type: ignore[valid-type,misc]
     __tablename__ = "bot_release"
 
     id: str = Field(
-        default_factory=lambda: get_id, primary_key=True, description="主键id、雪花id"
+        default_factory=get_id, primary_key=True, description="主键id、雪花id"
     )
     bot_id: str = Field(..., description="业务外键、助手表主键")
     version: str = Field(..., max_length=64, description="版本")
