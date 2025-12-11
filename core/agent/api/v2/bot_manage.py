@@ -9,8 +9,8 @@ from common.service import get_db_service
 from common.service.db.db_service import session_getter
 from fastapi import APIRouter, Header
 
-from agent.api.schemas.bot_manage_inputs import Auth, ProtocolSynchronization, Publish
-from agent.api.schemas.bot_manage_response import BotResponse, build_bot_response
+from agent.api.schemas_v2.bot_manage_inputs import Auth, ProtocolSynchronization, Publish
+from agent.api.schemas_v2.bot_manage_response import BotResponse, build_bot_response
 from agent.domain.models.bot import Bot, BotRelease, BotTenant
 from agent.exceptions.bot_exc import (
     AppAuthFailedExc,

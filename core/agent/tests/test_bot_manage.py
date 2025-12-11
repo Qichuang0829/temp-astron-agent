@@ -10,7 +10,7 @@ import aiohttp
 import pytest
 from common.otlp import sid as sid_module
 
-from agent.api.schemas.bot_manage_inputs import Auth, ProtocolSynchronization, Publish
+from agent.api.schemas_v2.bot_manage_inputs import Auth, ProtocolSynchronization, Publish
 from agent.api.v2.bot_manage import (
     _check_binding_status,
     _perform_binding,
@@ -294,8 +294,10 @@ class TestProtocolSynchronization:
         self, mock_session: MagicMock, mock_tenant_session: MagicMock
     ) -> None:
         """Test creating a new bot via protocol synchronization"""
-        from agent.api.schemas.bot_manage_inputs import (
+        from agent.api.schemas_v2.bot_manage_inputs import (
             DslInputs,
+        )
+        from agent.api.schemas_v2.bot_dsl import (
             ModelInputs,
             ModelPropertiesInputs,
         )
@@ -336,8 +338,10 @@ class TestProtocolSynchronization:
         self, mock_session: MagicMock, mock_tenant_session: MagicMock
     ) -> None:
         """Test updating an existing bot via protocol synchronization"""
-        from agent.api.schemas.bot_manage_inputs import (
+        from agent.api.schemas_v2.bot_manage_inputs import (
             DslInputs,
+        )
+        from agent.api.schemas_v2.bot_dsl import (
             ModelInputs,
             ModelPropertiesInputs,
         )
@@ -390,8 +394,10 @@ class TestProtocolSynchronization:
     @pytest.mark.asyncio
     async def test_protocol_synchronization_auth_failed(self) -> None:
         """Test protocol synchronization when tenant validation fails"""
-        from agent.api.schemas.bot_manage_inputs import (
+        from agent.api.schemas_v2.bot_manage_inputs import (
             DslInputs,
+        )
+        from agent.api.schemas_v2.bot_dsl import (
             ModelInputs,
             ModelPropertiesInputs,
         )
@@ -430,8 +436,10 @@ class TestProtocolSynchronization:
     @pytest.mark.asyncio
     async def test_protocol_synchronization_exception(self) -> None:
         """Test protocol synchronization when exception occurs"""
-        from agent.api.schemas.bot_manage_inputs import (
+        from agent.api.schemas_v2.bot_manage_inputs import (
             DslInputs,
+        )
+        from agent.api.schemas_v2.bot_dsl import (
             ModelInputs,
             ModelPropertiesInputs,
         )

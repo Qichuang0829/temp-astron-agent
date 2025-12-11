@@ -3,21 +3,6 @@ from typing import Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class FileShellInputs(BaseModel):
-    open: bool = Field(...)
-
-
-class SandboxInputs(BaseModel):
-    workpath: str = Field(...)
-    files: Optional[FileShellInputs] = Field(default=None)
-    shell: Optional[FileShellInputs] = Field(default=None)
-
-
-class FollowUpSuggestionInputs(BaseModel):
-    open: bool = Field(...)
-    suggestion_prompt: Optional[str] = Field(default=None)
-
-
 class PropertiesInputs(BaseModel):
     repos: list[str] = Field(...)
     docs: Optional[list[str]] = Field(default=None)
@@ -55,6 +40,15 @@ class ToolInputs(BaseModel):
     tool_schema: dict = Field(..., alias="schema", serialization_alias="schema")
 
 
+class WorkflowInputs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    flow_id: str = Field(...)
+    name: str = Field(...)
+    description: str = Field(...)
+    workflow_schema: dict = Field(..., alias="schema", serialization_alias="schema")
+
+
 class CusMcpServerInputs(BaseModel):
     server_url: str = Field(...)
     tools: list[ToolInputs] = Field(...)
@@ -79,6 +73,7 @@ class PluginInputs(BaseModel):
     link_tools: Optional[list[LinkToolInputs]] = Field(default=None)
     link_mcp_servers: Optional[list[LinkMcpServerInputs]] = Field(default=None)
     cus_mcp_servers: Optional[list[CusMcpServerInputs]] = Field(default=None)
+    workflows: Optional[list[WorkflowInputs]] = Field(default=None)
 
 
 class RandomInputs(BaseModel):
@@ -128,7 +123,7 @@ class PromptInputs(BaseModel):
     prompt: str = Field(...)
 
 
-class DslInputs(BaseModel):
+class Dsl(BaseModel):
     name: str = Field(..., min_length=1)
     description: Optional[str] = Field(default=None)
     prompt: Optional[PromptInputs] = Field(default=None)
@@ -136,22 +131,6 @@ class DslInputs(BaseModel):
     model: ModelInputs = Field(...)
     plugin: Optional[PluginInputs] = Field(default=None)
     rag: Optional[RagInputs] = Field(default=None)
-    follow_up_suggestion: Optional[FollowUpSuggestionInputs] = Field(default=None)
-    sandbox: Optional[SandboxInputs] = Field(default=None)
 
-
-class ProtocolSynchronization(BaseModel):
-    id: Optional[str] = Field(default=None)
-    dsl: DslInputs = Field(...)
-
-
-class Publish(BaseModel):
-    bot_id: str = Field(...)
-    version: str = Field(...)
-    description: str = Field(...)
-    dsl: Optional[DslInputs] = Field(default=None)
-
-
-class Auth(BaseModel):
-    version_id: int = Field(...)
-    app_id: str = Field(...)
+    # follow_up_suggestion: Optional[FollowUpSuggestionInputs] = Field(default=None)
+    # sandbox: Optional[SandboxInputs] = Field(default=None)
