@@ -131,6 +131,3 @@ class Dsl(BaseModel):
     model: ModelInputs = Field(...)
     plugin: Optional[PluginInputs] = Field(default=None)
     rag: Optional[RagInputs] = Field(default=None)
-
-    # follow_up_suggestion: Optional[FollowUpSuggestionInputs] = Field(default=None)
-    # sandbox: Optional[SandboxInputs] = Field(default=None)
