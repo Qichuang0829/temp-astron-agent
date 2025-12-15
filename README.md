@@ -6,7 +6,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/iflytek/astron-agent?style=social)](https://github.com/iflytek/astron-agent/stargazers)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/iflytek/astron-agent)
 
-English | [简体中文](README-zh.md)
+English | [简体中文](docs/README-zh.md)
 
 </div>
 
@@ -30,6 +30,7 @@ The platform supports **high-availability** deployment, enabling organizations t
 
 - **[Astron Hackathon @ 2025 iFLYTEK Global 1024 Developer Festival](https://luma.com/9zmbc6xb)**
 - **[Astron Agent Zhengzhou Meetup](https://github.com/iflytek/astron-agent/discussions/672)**
+- **[Astron on Campus @ Zhejiang University of Finance and Economics](https://mp.weixin.qq.com/s/oim_Z0ckgpFwf5jOskoJuA)**
 
 ## 🚀 Quick Start
 

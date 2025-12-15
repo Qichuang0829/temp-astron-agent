@@ -214,6 +214,7 @@ async def tool_list(list_info: MCPToolListRequest = Body()) -> MCPToolListRespon
             sid=session_id,
             data=MCPToolListData(servers=items),
         )
+        span_context.add_info_events({"tool_list_result": result.model_dump_json()})
         if os.getenv(const.OTLP_ENABLE_KEY, "0").lower() == "1":
             m.in_success_count()
             node_trace.answer = result.model_dump_json()
@@ -459,7 +460,7 @@ async def call_tool(call_info: MCPCallToolRequest = Body()) -> MCPCallToolRespon
             mcp_server_id,
             m,
         )
-
+        span_context.add_info_events({"call_tool_result": result.model_dump_json()})
         # Log success if the call succeeded
         if result.code == ErrCode.SUCCESSES.code:
             if os.getenv(const.OTLP_ENABLE_KEY, "0").lower() == "1":

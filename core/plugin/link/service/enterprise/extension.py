@@ -125,6 +125,9 @@ def register_mcp(
             crud_inst = ToolCrudOperation(get_db_engine())
             crud_inst.add_mcp(tool_info)
             resp_data = {"name": mcp_name, "id": tool_id}
+            span_context.add_info_events(
+                {"register_mcp_result": json.dumps(resp_data, ensure_ascii=False)}
+            )
             if os.getenv(const.OTLP_ENABLE_KEY, "0").lower() == "1":
                 m.in_success_count()
                 node_trace.answer = json.dumps(resp_data, ensure_ascii=False)

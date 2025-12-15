@@ -38,24 +38,28 @@ class IFlyExecutor(BaseExecutor):
         :return: Execution result as string
         :raises CustomException: If execution fails or service is unavailable
         """
-        url = os.getenv("CODE_EXEC_URL", "")
-        if not url:
-            raise CustomException(
-                err_code=CodeEnum.CODE_EXECUTION_ERROR,
-                err_msg="code_exec_url not found",
-                cause_error="code_exec_url not found",
-            )
+        url: str = os.getenv("CODE_EXEC_URL", "")
+        assert url, "CODE_EXEC_URL is not set"
+
+        code_exec_api_key: str = os.getenv("CODE_EXEC_API_KEY", "")
+        code_exec_api_secret: str = os.getenv("CODE_EXEC_API_SECRET", "")
 
         runner_result = ""
         # Prepare request parameters
-        params = {
+        params: dict[str, Any] = {
             "appid": kwargs.get("app_id", ""),
             "uid": kwargs.get("uid", ""),
         }
-        body = {
+        body: dict[str, Any] = {
             "code": code,
             "timeout_sec": timeout,
         }
+        headers: dict[str, str] = {}
+        if code_exec_api_key and code_exec_api_secret:
+            headers["Authorization"] = (
+                f"Bearer {code_exec_api_key}:{code_exec_api_secret}"
+            )
+
         span.add_info_events({"request_body": json.dumps(body, ensure_ascii=False)})
 
         try:
@@ -69,7 +73,7 @@ class IFlyExecutor(BaseExecutor):
                         cause_error="Retry attempts exceeded 5 times",
                     )
                 status, runner_result, resp_body, resp_body_str = (
-                    await self._do_request(url, body, params, span)
+                    await self._do_request(url, body, params, headers, span)
                 )
                 if status == httpx.codes.OK:
                     break
@@ -100,7 +104,7 @@ class IFlyExecutor(BaseExecutor):
                         err_msg=f"{IFlyExecutor.__remove_first_traceback_line(stderr)}",
                     )
         except Exception as err:
-            if isinstance(err, CustomExceptionCD):
+            if isinstance(err, (CustomExceptionCD, CustomException)):
                 raise err
             else:
                 raise CustomException(
@@ -114,6 +118,7 @@ class IFlyExecutor(BaseExecutor):
         url: str,
         body: dict,
         params: dict,
+        headers: dict,
         span: Span,
     ) -> tuple[int, str, dict, str]:
         """
@@ -122,12 +127,15 @@ class IFlyExecutor(BaseExecutor):
         :param url: Service endpoint URL
         :param body: Request body containing code and timeout
         :param params: Query parameters (app_id, uid)
+        :param headers: Request headers
         :param span: Tracing span for logging
         :return: Tuple of (status_code, result, response_body, response_body_string)
         :raises CustomExceptionCD: If request fails with non-retryable error
         """
         async with ClientSession() as session:
-            async with session.post(url, json=body, params=params) as resp:
+            async with session.post(
+                url, json=body, params=params, headers=headers
+            ) as resp:
                 resp_body = json.loads(await resp.text())
                 resp_body_str = json.dumps(resp_body, ensure_ascii=False)
                 if resp.status == httpx.codes.OK:

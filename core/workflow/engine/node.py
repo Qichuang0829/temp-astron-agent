@@ -4,6 +4,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union, cast
 
+from loguru import logger
 from pydantic import BaseModel
 
 from workflow.engine.callbacks.callback_handler import ChatCallBacks
@@ -604,6 +605,12 @@ class SparkFlowEngineNode(BaseModel):
         # Record LLM output
         if self.node_id.split(":")[0] in self.llm_nodes:
             self.node_log.llm_output = result.raw_output
+
+        try:
+            self.node_log.append_config_data(self.node_instance.__dict__)
+        except Exception as err:
+            logger.error(f"Failed to append config data: {err}")
+
         self.node_log.set_end()
 
     async def async_call(
@@ -950,9 +957,6 @@ class NodeFactory:
             input_keys.append(id_name_dict)
         else:
             input_keys = [node_input.name for node_input in inputs]
-
-        for node_output in outputs:
-            output_keys.append(node_output.name)
 
         return node_class(
             node_id=node.id,

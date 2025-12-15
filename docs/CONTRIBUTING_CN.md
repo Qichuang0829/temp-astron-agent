@@ -22,7 +22,7 @@
 
 本项目遵循行为准则。参与项目时，请遵守此准则。如遇到不当行为，请向项目维护者举报。
 
-请阅读我们的[行为准则](.github/code_of_conduct.md)，了解我们为所有贡献者提供欢迎和包容环境的承诺。
+请阅读我们的[行为准则](../.github/code_of_conduct.md)，了解我们为所有贡献者提供欢迎和包容环境的承诺。
 
 ## 快速开始
 
@@ -81,6 +81,28 @@ make check-tools
 # 安装 Git 钩子
 make hooks-install
 ```
+
+### Pre-commit 设置（推荐）
+
+我们使用 [pre-commit](https://pre-commit.com/) 进行自动化代码质量检查和密钥扫描。这是确保代码质量的**推荐方式**。
+
+```bash
+# 安装 pre-commit（如果尚未安装）
+pip install pre-commit
+
+# 安装 pre-commit 钩子
+pre-commit install
+pre-commit install --hook-type commit-msg
+```
+
+Pre-commit 将在每次提交时自动运行：
+- 检查代码格式（Black、Prettier、gofmt、Spotless）
+- 运行代码检查器（flake8、ESLint、golangci-lint、Checkstyle）
+- 执行类型检查（mypy、TypeScript）
+- 扫描敏感信息（gitleaks）
+- 验证提交消息格式
+
+详细使用说明请参阅 [Pre-commit 使用指南](docs/PRE-COMMIT_zh.md)。
 
 ## 项目结构
 
@@ -144,17 +166,14 @@ make new-hotfix name=security-vulnerability
 # 格式化所有代码
 make format
 
-# 运行质量检查
-make check
+# 使用 pre-commit 运行代码质量检查（推荐）
+pre-commit run --all-files
 
 # 运行测试
 make test
 
 # 构建所有项目
 make build
-
-# 安全推送（带预检查）
-make safe-push
 ```
 
 ## 代码质量标准
@@ -181,18 +200,24 @@ Astron Agent 支持多种编程语言，具有统一的质量标准：
 - **测试**：充分的测试覆盖率
 - **文档**：清晰的代码注释和文档
 
-### 质量检查命令
+### 使用 Pre-commit 进行代码质量检查
+
+我们使用 pre-commit 作为统一的代码质量检查工具。它会在提交时自动运行检查暂存的文件，你也可以手动运行：
 
 ```bash
-# 检查所有语言
-make check
+# 仅检查暂存的文件（git commit 时自动运行）
+pre-commit run
 
-# 检查特定语言
-make check-go
-make check-java
-make check-python
-make check-typescript
+# 检查仓库中的所有文件
+pre-commit run --all-files
+
+# 运行特定的钩子
+pre-commit run black --all-files
+pre-commit run eslint-check --all-files
+pre-commit run golangci-lint --all-files
 ```
+
+详细信息请参阅 [Pre-commit 使用指南](docs/PRE-COMMIT_zh.md)。
 
 ## 测试指南
 
@@ -275,12 +300,14 @@ docs(guide): 完善快速开始指南
 
 提交前，请确保：
 
-- [ ] 代码已格式化 (`make format`)
-- [ ] 质量检查通过 (`make check`)
-- [ ] 测试通过 (`make test`)
+- [ ] 已安装 pre-commit 钩子（`pre-commit install && pre-commit install --hook-type commit-msg`）
+- [ ] 代码质量检查通过（`pre-commit run --all-files`）
+- [ ] 测试通过（`make test`）
 - [ ] 分支命名遵循约定
-- [ ] 提交消息遵循格式
+- [ ] 提交消息遵循 [Conventional Commits](https://www.conventionalcommits.org/) 格式
 - [ ] 如需要，文档已更新
+
+> **提示**：如果已安装 pre-commit 钩子，代码质量和提交消息格式将在每次提交时自动检查。
 
 ## 问题报告指南
 
@@ -391,10 +418,11 @@ docs(guide): 完善快速开始指南
 
 ## 其他资源
 
-- [分支与提交规范](.github/quality-requirements/branch-commit-standards-zh.md)
-- [代码质量要求](.github/quality-requirements/code-requirements-zh.md)
-- [Makefile 使用指南](docs/Makefile-readme-zh.md)
-- [项目 README](README.md)
+- [Pre-commit 使用指南](PRE-COMMIT_zh.md)
+- [分支与提交规范](../.github/quality-requirements/branch-commit-standards-zh.md)
+- [代码质量要求](../.github/quality-requirements/code-requirements-zh.md)
+- [Makefile 使用指南](Makefile-readme-zh.md)
+- [项目 README](../README.md)
 
 ## 有问题？
 

@@ -749,7 +749,7 @@ def _filter_response_frame(
 
     response_frame.workflow_step.node = None
 
-    if is_ping:
+    if is_ping and is_stream:
         return response_frame
 
     if is_stop:

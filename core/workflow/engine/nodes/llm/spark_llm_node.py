@@ -78,15 +78,13 @@ class SparkLLMNode(BaseLLMNode):
         :param think_contents: Reasoning/thinking content from LLM
         :return: Dictionary with parsed response data
         """
-        if think_contents:
-            resp = {}
-            for output_key in self.output_identifier:
-                if output_key == "REASONING_CONTENT":
-                    resp["REASONING_CONTENT"] = think_contents
-                else:
-                    resp[output_key] = res
-            return resp
-        return {self.output_identifier[0]: res}
+        resp = {}
+        for output_key in self.output_identifier:
+            if output_key == "REASONING_CONTENT":
+                resp["REASONING_CONTENT"] = think_contents
+            else:
+                resp[output_key] = res
+        return resp
 
     def resp_format_markdown_parser(self, res: str) -> dict:
         """

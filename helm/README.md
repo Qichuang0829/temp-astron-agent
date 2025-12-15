@@ -24,9 +24,6 @@ global:
   # 例如: http://your-domain.com
   hostBaseAddress: "http://your-domain.com"
   
-  # mysql初始化脚本，请替换为服务器该目录的实际地址:/helm/astron-agent/files/mysql
-  initScriptsPath: /data/astron-agent/helm/astron-agent/files/mysql/
-  
   # 配置 讯飞开放平台 相关 APP_ID API_KEY 等信息
   #获取文档详见：https://www.xfyun.cn/doc/platform/quickguide.html
   platformAppId: "your-app-id"

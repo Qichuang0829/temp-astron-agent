@@ -74,7 +74,7 @@ class OpenAIChatAI(ChatAI):
         """
         raise NotImplementedError
 
-    def decode_message(self, msg: dict) -> Tuple[int, str, str, str, Dict[str, Any]]:
+    def decode_message(self, msg: dict) -> Tuple[str, str, str, Dict[str, Any]]:
         """
         Decode a message from OpenAI API response.
 
@@ -86,7 +86,7 @@ class OpenAIChatAI(ChatAI):
         content = delta["content"]
         reasoning_content = delta.get("reasoning_content", "")
         token_usage = {} if not msg["usage"] else msg["usage"]
-        return 0, status, content, reasoning_content, token_usage
+        return status, content, reasoning_content, token_usage
 
     async def _recv_messages(
         self,
