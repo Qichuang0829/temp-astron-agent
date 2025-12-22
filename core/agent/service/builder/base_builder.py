@@ -219,10 +219,10 @@ class BaseApiBuilder(BaseModel):
     ) -> BaseLLMModel:
 
         with self.span.start("BuildModel") as sp:
-            if api_key:
-                sk = api_key
-            else:
-                sk = await self.query_maas_sk(app_id, model_name)
+            # if api_key:
+            #     sk = api_key
+            # else:
+            #     sk = await self.query_maas_sk(app_id, model_name)
 
             # Normalize base_url: remove /chat/completions if present
             # OpenAI SDK automatically appends this path
@@ -238,12 +238,21 @@ class BaseApiBuilder(BaseModel):
                     f"Normalized base_url: {base_url} -> {normalized_base_url}"
                 )
 
+            print("-------")
+            print(                {
+                    "model": model_name,
+                    "base_url": base_url,
+                    "normalized_base_url": normalized_base_url,
+                    "api_key": api_key,
+                    "app_id": app_id,
+                })
+            print("-------")
             sp.add_info_events(
                 {
                     "model": model_name,
                     "base_url": base_url,
                     "normalized_base_url": normalized_base_url,
-                    "api_key": sk,
+                    "api_key": api_key,
                     "app_id": app_id,
                 }
             )
@@ -273,11 +282,12 @@ class BaseApiBuilder(BaseModel):
             model = BaseLLMModel(
                 name=model_name,
                 llm=AsyncOpenAI(
-                    api_key=sk,
+                    api_key=api_key,
                     base_url=normalized_base_url,
                     http_client=http_client,
                     timeout=300.0,  # Overall timeout: 5 minutes
                     max_retries=2,  # Retry failed requests twice
                 ),
             )
+            print("over create..")
             return model

@@ -1,113 +1,17 @@
-from typing import Literal, Optional, Union
+from typing import Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class PropertiesInputs(BaseModel):
-    repos: list[str] = Field(...)
-    docs: Optional[list[str]] = Field(default=None)
-    top_k: int = Field(...)
-    min_score: float = Field(...)
-
-
-class KnowledgeInputs(BaseModel):
-    name: str = Field(...)
-    description: str = Field(...)
-    type: Literal["AIUI-RAG2", "CBG-RAG"] = Field(...)
-    properties: PropertiesInputs = Field(...)
-
-    @model_validator(mode="after")
-    def validate_docs_by_type(self) -> "KnowledgeInputs":
-        """Validate whether properties.docs field is required based on type field"""
-        if self.type == "CBG-RAG" and self.properties.docs is None:
-            raise ValueError("docs field is required when type is 'CBG-RAG'")
-        return self
-
-
-class RagInputs(BaseModel):
-    call_mode: Literal["auto", "must"] = Field(...)
-    query_rewrite: bool = Field(...)
-    query_rewrite_prompt: str = Field(...)
-    knowledges: Optional[list[KnowledgeInputs]] = Field(default=None)
-
-
-class ToolInputs(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    name: str = Field(...)
-    ori_name: str = Field(...)
-    description: str = Field(...)
-    tool_schema: dict = Field(..., alias="schema", serialization_alias="schema")
-
-
-class WorkflowInputs(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    flow_id: str = Field(...)
-    name: str = Field(...)
-    description: str = Field(...)
-    workflow_schema: dict = Field(..., alias="schema", serialization_alias="schema")
-
-
-class CusMcpServerInputs(BaseModel):
-    server_url: str = Field(...)
-    tools: list[ToolInputs] = Field(...)
-
-
-class LinkMcpServerInputs(BaseModel):
-    server_id: str = Field(...)
-    tools: list[ToolInputs] = Field(...)
-
-
-class LinkToolInputs(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    id: str = Field(...)
-    name: str = Field(...)
-    ori_name: str = Field(...)
-    description: str = Field(...)
-    link_tool_schema: dict = Field(..., alias="schema", serialization_alias="schema")
-
-
-class PluginInputs(BaseModel):
-    link_tools: Optional[list[LinkToolInputs]] = Field(default=None)
-    link_mcp_servers: Optional[list[LinkMcpServerInputs]] = Field(default=None)
-    cus_mcp_servers: Optional[list[CusMcpServerInputs]] = Field(default=None)
-    workflows: Optional[list[WorkflowInputs]] = Field(default=None)
-
-
-class RandomInputs(BaseModel):
-    temperature: Optional[float] = Field(default=None)
-    top_p: Optional[int] = Field(default=None)
-    max_tokens: Optional[int] = Field(default=None)
-
-
-class ParametersInputs(BaseModel):
-    random: Optional[RandomInputs] = Field(default=None)
-
-
-class ModelPropertiesInputs(BaseModel):
-    id: str = Field(...)
-    url: str = Field(...)
-    token: str = Field(...)
-    parameters: Optional[ParametersInputs] = Field(default=None)
-
-
-class ModelInputs(BaseModel):
-    name: str = Field(..., min_length=1)
-    description: Optional[str] = Field(default=None)
-    type: str = Field(...)
-    properties: ModelPropertiesInputs = Field(...)
-
-
-class VariableInputs(BaseModel):
+# prompt --
+class PromptVariable(BaseModel):
     key: str = Field(...)
     type: Literal["string", "object", "array"] = Field(...)
     description: str = Field(...)
     default_value: Union[str, dict, list] = Field(...)
 
     @model_validator(mode="after")
-    def validate_default_value_type(self) -> "VariableInputs":
+    def validate_default_value_type(self) -> "PromptVariable":
         """Validate default_value type based on type field"""
         expected_type = {"string": str, "object": dict, "array": list}[self.type]
         if not isinstance(self.default_value, expected_type):
@@ -118,16 +22,119 @@ class VariableInputs(BaseModel):
         return self
 
 
-class PromptInputs(BaseModel):
-    variables: Optional[list[VariableInputs]] = Field(default=None)
-    prompt: str = Field(...)
+class Prompt(BaseModel):
+    variables: list[PromptVariable] = Field(default_factory=list)
+    instruct: str = Field(default="")
 
 
-class Dsl(BaseModel):
+# model --
+class OpenAILikeModelPropertiesInputs(BaseModel):
+    id: str = Field(...)
+    url: str = Field(...)
+    bearer_token: str = Field(...)
+
+
+class Model(BaseModel):
     name: str = Field(..., min_length=1)
-    description: Optional[str] = Field(default=None)
-    prompt: Optional[PromptInputs] = Field(default=None)
-    max_reason_cnt: Optional[int] = Field(default=None)
-    model: ModelInputs = Field(...)
-    plugin: Optional[PluginInputs] = Field(default=None)
-    rag: Optional[RagInputs] = Field(default=None)
+    description: str = Field(default="")
+    type: Literal["openai-like"] = Field(...)
+    properties: Union[OpenAILikeModelPropertiesInputs] = Field(...)
+
+
+# link --
+class FcSchemaParameterProperty(BaseModel):
+    name: str = Field(...)
+    type: str = Field(...)
+    description: str = Field(...)
+
+
+class FcSchemaParameters(BaseModel):
+    type: Literal["object"] = Field(...)
+    properties: dict[str, FcSchemaParameterProperty] = Field(...)
+    required: list[str] = Field(...)
+
+
+class FcSchema(BaseModel):
+    name: str = Field(...)
+    description: str = Field(...)
+    parameters: FcSchemaParameters = Field(...)
+
+
+class LinkToolInputs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(...)
+    version: str = Field(...)
+    operation_id: str = Field(...)
+    fc_schema: FcSchema = Field(...)
+
+
+# mcp --
+class McpToolInputs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    operation_id: str = Field(...)
+    fc_schema: FcSchema = Field(...)
+
+
+class LinkMcpServerInputs(BaseModel):
+    server_id: str = Field(...)
+    tools: list[McpToolInputs] = Field(...)
+
+
+# custom mcp server --
+class CusMcpServerInputs(BaseModel):
+    server_url: str = Field(...)
+    tools: list[McpToolInputs] = Field(...)
+
+
+# workflow --
+class WorkflowInputs(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    flow_id: str = Field(...)
+    fc_schema: FcSchema = Field(...)
+
+
+class PluginInputs(BaseModel):
+    link_tools: list[LinkToolInputs] = Field(default_factory=list)
+    link_mcp_servers: list[LinkMcpServerInputs] = Field(default_factory=list)
+    cus_mcp_servers: list[CusMcpServerInputs] = Field(default_factory=list)
+    workflows: list[WorkflowInputs] = Field(default_factory=list)
+
+
+# rag --
+class RagKnowledgeProperties(BaseModel):
+    repos: list[str] = Field(default_factory=list)
+    docs: list[str] = Field(default_factory=list)
+    top_k: int = Field(default=3)
+    min_score: float = Field(default=3.0)
+
+
+class RagKnowledge(BaseModel):
+    name: str = Field(...)
+    description: str = Field(...)
+    type: Literal["AIUI-RAG2", "CBG-RAG"] = Field(...)
+    properties: RagKnowledgeProperties = Field(...)
+
+    @model_validator(mode="after")
+    def validate_docs_by_type(self) -> "RagKnowledge":
+        """Validate whether properties.docs field is required based on type field"""
+        if self.type == "CBG-RAG" and self.properties.docs is None:
+            raise ValueError("docs field is required when type is 'CBG-RAG'")
+        return self
+
+
+class Rag(BaseModel):
+    knowledges: list[RagKnowledge] = Field(default_factory=list)
+
+
+# dsl --
+class BotDsl(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = Field(default="")
+    prompt: Prompt = Field(default_factory=Prompt)
+    max_reason_cnt: int = Field(default=12)
+    model: Model = Field(...)
+    plugin: PluginInputs = Field(default_factory=PluginInputs)
+    rag: Rag = Field(default_factory=Rag)

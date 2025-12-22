@@ -2,19 +2,18 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from agent.api.schemas_v2.bot_dsl import Dsl
+from agent.api.schemas_v2.bot_dsl import BotDsl
 
 
 class ProtocolSynchronization(BaseModel):
-    id: Optional[str] = Field(default=None)
-    dsl: Dsl = Field(...)
+    id: Optional[int] = Field(default=None)
+    dsl: BotDsl = Field(...)
 
 
 class Publish(BaseModel):
-    bot_id: str = Field(...)
-    version: str = Field(...)
-    description: str = Field(...)
-    dsl: Optional[Dsl] = Field(default=None)
+    bot_id: int = Field(...)
+    version_name: str = Field(...)
+    description: str = Field(default="")
 
 
 class Auth(BaseModel):

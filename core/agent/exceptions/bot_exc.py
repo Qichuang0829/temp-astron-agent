@@ -1,4 +1,5 @@
 from common.exceptions.base import BaseExc
+from agent.exceptions.agent_exc import AgentExc
 
 from agent.exceptions.codes import (
     c_40040,
@@ -8,10 +9,11 @@ from agent.exceptions.codes import (
     c_40603,
     c_40604,
     c_40605,
+    c_40606
 )
 
 
-class BotExc(BaseExc):
+class BotExc(AgentExc):
     pass
 
 
@@ -22,3 +24,4 @@ BotAuthFailedExc = BotExc(*c_40602)
 BotNotFoundExc = BotExc(*c_40603)
 TenantNotFoundExc = BotExc(*c_40604)
 BotPublishDuplicatedExc = BotExc(*c_40605)
+ReasonStepPluginNotFoundExc = BotExc(*c_40606)

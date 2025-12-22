@@ -6,7 +6,7 @@ from typing import Any, cast
 from common.otlp.trace.span import Span
 
 from agent.api.schemas_v2.bot_chat_inputs import Chat
-from agent.api.schemas_v2.bot_dsl import Dsl, KnowledgeInputs
+from agent.api.schemas_v2.bot_dsl import BotDsl, RagKnowledge
 from agent.service.builder.base_builder import (
     BaseApiBuilder,
     CotRunnerParams,
@@ -29,7 +29,7 @@ class KnowledgeQueryParams:
 
 class ChatRunnerBuilder(BaseApiBuilder):
     inputs: Chat
-    dsl: Dsl
+    dsl: BotDsl
 
     async def build(self) -> DebugChatRunner:
         """Build"""
@@ -104,7 +104,7 @@ class ChatRunnerBuilder(BaseApiBuilder):
             )
 
     async def query_knowledge_by_workflow(
-        self, knowledge_list: list[KnowledgeInputs], span: Span
+        self, knowledge_list: list[RagKnowledge], span: Span
     ) -> tuple[list, str]:
         """Query knowledge base"""
         with span.start("QueryKnowledgeByWorkflow") as sp:
@@ -127,7 +127,7 @@ class ChatRunnerBuilder(BaseApiBuilder):
             return metadata_list, backgrounds
 
     def _create_knowledge_tasks(
-        self, knowledge_list: list[KnowledgeInputs], span: Span
+        self, knowledge_list: list[RagKnowledge], span: Span
     ) -> list:
         """Create knowledge query tasks"""
         tasks = []

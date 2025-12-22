@@ -9,7 +9,7 @@ from pydantic import ConfigDict
 from starlette.responses import StreamingResponse
 
 from agent.api.schemas_v2.bot_chat_inputs import Chat
-from agent.api.schemas_v2.bot_dsl import Dsl
+from agent.api.schemas_v2.bot_dsl import BotDsl
 from agent.api.v1.base_api import CompletionBase
 from agent.domain.models.bot import BotRelease
 from agent.exceptions.agent_exc import AgentInternalExc
@@ -28,7 +28,7 @@ class CustomChatCompletion(CompletionBase):
     bot_id: str
     uid: str
     question: str
-    dsl: Dsl
+    dsl: BotDsl
     model_config = ConfigDict(arbitrary_types_allowed=True)
     span: Span
 
@@ -129,7 +129,7 @@ async def bot_chat(
                 bot_id="",
                 uid=inputs.uid,
                 question=inputs.get_last_message_content(),
-                dsl=Dsl(**json.loads(bot_release.dsl)),
+                dsl=BotDsl(**json.loads(bot_release.dsl)),
             )
 
             async def generate() -> AsyncGenerator[str, None]:

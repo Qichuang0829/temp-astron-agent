@@ -1,9 +1,10 @@
 import json
 import os
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Union
 
 import aiohttp
+from fastapi.openapi.models import APIKey
 from common.otlp.trace.span import Span
 from common.service import get_db_service
 from common.service.db.db_service import session_getter
@@ -15,7 +16,7 @@ from agent.api.schemas_v2.bot_manage_inputs import (
     Publish,
 )
 from agent.api.schemas_v2.bot_manage_response import BotResponse, build_bot_response
-from agent.domain.models.bot import Bot, BotRelease, BotTenant
+from agent.domain.models.bot import AppAuthDetail, Bot, BotRelease, BotTenant
 from agent.exceptions.bot_exc import (
     AppAuthFailedExc,
     BotAuthFailedExc,
@@ -47,7 +48,7 @@ async def _validate_tenant(x_consumer_username: str) -> None:
             )
 
 
-async def _validate_app_auth(app_id: str, sp: Span) -> None:
+async def _validate_app_auth(app_id: str, sp: Span) -> dict:
     app_detail = await APPAuth().app_detail(app_id)
     sp.add_info_events({"kong-app-detail": json.dumps(app_detail, ensure_ascii=False)})
     if app_detail is None:
@@ -56,6 +57,7 @@ async def _validate_app_auth(app_id: str, sp: Span) -> None:
         raise AppAuthFailedExc(app_detail.get("message", ""))
     if len(app_detail.get("data", [])) == 0:
         raise AppAuthFailedExc(f"Cannot find appid:{app_id} authentication information")
+    return app_detail
 
 
 async def _check_binding_status(
@@ -110,6 +112,7 @@ async def protocol_synchronization(
 ) -> BotResponse:
     """Protocol Synchronization: Query data by ID, update if exists, create if not exists"""
     error: BotExc = BotExc(*c_0)
+    resp_data: Union[dict] = dict()
     span = Span(
         app_id=x_consumer_username,
     )
@@ -128,55 +131,34 @@ async def protocol_synchronization(
                 dsl_json = json.dumps(
                     inputs.dsl.model_dump(exclude_none=True), ensure_ascii=False
                 )
-                # Query if the record exists by id
-                existing_bot = (
+                bot = (
                     session.query(Bot).filter(Bot.id == inputs.id).first()
                     if inputs.id
                     else None
                 )
-
-                # Use x_consumer_username as app_id
-                app_id = x_consumer_username
                 current_time = datetime.now()
-                if existing_bot:
-                    # If record exists, update the data
-                    existing_bot.dsl = dsl_json
-                    existing_bot.app_id = app_id
-                    existing_bot.update_at = current_time
-                    session.add(existing_bot)
-                    session.commit()
-                    session.refresh(existing_bot)
-                    bot = existing_bot
+                if bot:
+                    bot.dsl = dsl_json
+                    bot.update_at = current_time
                 else:
-                    # If record does not exist, create a new record
-                    # pub_status default value is 0 (draft status)
-                    new_bot = Bot(
+                    bot = Bot(
                         id=inputs.id,
-                        app_id=app_id,
+                        app_id=x_consumer_username,
                         dsl=dsl_json,
                         create_at=current_time,
                         update_at=current_time,
                     )
-                    session.add(new_bot)
-                    session.commit()
-                    session.refresh(new_bot)
-                    bot = new_bot
+                session.add(bot)
+                session.commit()
+                session.refresh(bot)
+                resp_data["id"] = bot.id
 
-                # Build response data
-                response_data = {
-                    "id": bot.id,
-                    "app_id": bot.app_id,
-                    "create_at": bot.create_at.isoformat() if bot.create_at else None,
-                    "update_at": bot.update_at.isoformat() if bot.update_at else None,
-                }
-
-                return build_bot_response(error, response_data)
         except BotExc as e:
             error = e
         except Exception as e:  # pylint: disable=broad-exception-caught
             error = BotProtocolSynchronizationFailedExc(str(e))
 
-        return build_bot_response(error)
+        return build_bot_response(error, resp_data)
 
 
 @bot_manage_router.post("/bot/publish")  # type: ignore[misc]
@@ -191,7 +173,7 @@ async def publish(
     with span.start("Publish") as sp:
         try:
             sp.set_attribute("bot_id", inputs.bot_id)
-            sp.set_attribute("version", inputs.version)
+            sp.set_attribute("version", inputs.version_name)
             sp.add_info_events(
                 {"publish-inputs": inputs.model_dump_json(by_alias=True)}
             )
@@ -203,58 +185,37 @@ async def publish(
                 if not bot:
                     raise BotNotFoundExc(f"Bot with id {inputs.bot_id} not found")
 
+                if bot.id != inputs.bot_id:
+                    raise BotPublishFailedExc(f"Not allow")
+
                 bot_version = (
                     session.query(BotRelease)
                     .filter(
                         BotRelease.bot_id == inputs.bot_id,
-                        BotRelease.version == inputs.version,
+                        BotRelease.version == inputs.version_name,
                     )
                     .first()
                 )
                 if bot_version:
                     raise BotPublishDuplicatedExc(
-                        f"Bot publish bot id:{inputs.bot_id} version:{inputs.version} duplicated"
+                        f"Bot publish bot id:{inputs.bot_id} version:{inputs.version_name} duplicated"
                     )
 
                 current_time = datetime.now()
-                # Check if dsl field is provided
-                if inputs.dsl is not None:
-                    # If dsl is provided, use the user-provided dsl to create BotRelease
-                    dsl_json = json.dumps(
-                        inputs.dsl.model_dump(exclude_none=True), ensure_ascii=False
-                    )
 
-                    # Create BotRelease record
-                    bot_release = BotRelease(
-                        bot_id=inputs.bot_id,
-                        version=inputs.version,
-                        description=inputs.description,
-                        dsl=dsl_json,
-                        create_at=current_time,
-                        update_at=current_time,
-                    )
-                    session.add(bot_release)
-                    session.commit()
-                    session.refresh(bot_release)
+                bot_release = BotRelease(
+                    bot_id=inputs.bot_id,
+                    version=inputs.version_name,
+                    description=inputs.description,
+                    dsl=bot.dsl,  # Use dsl from Bot table
+                    create_at=current_time,
+                    update_at=current_time,
+                )
+                session.add(bot_release)
+                session.commit()
+                session.refresh(bot_release)
 
-                    return build_bot_response(error, {"version": bot_release.id})
-                else:
-                    # Create BotRelease using dsl from Bot table
-                    bot_release = BotRelease(
-                        bot_id=inputs.bot_id,
-                        version=inputs.version,
-                        description=inputs.description,
-                        dsl=bot.dsl,  # Use dsl from Bot table
-                        create_at=current_time,
-                        update_at=current_time,
-                    )
-                    session.add(bot_release)
-
-                    session.commit()
-                    session.refresh(bot_release)
-                    session.refresh(bot)
-
-                    return build_bot_response(error, {"version": bot_release.id})
+                return build_bot_response(error, {"version_id": bot_release.id})
         except BotExc as e:
             error = e
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -290,46 +251,80 @@ async def auth(
             sp.add_info_events({"auth-inputs": inputs.model_dump_json(by_alias=True)})
 
             await _validate_tenant(x_consumer_username)
-            await _validate_app_auth(inputs.app_id, sp)
-            # Build query parameters
-            params = {
-                "app_id": inputs.app_id,
-                "type": "agent",
-                "ability_id": str(inputs.version_id),
-            }
+            # response format {'sid': 'app0001912f@hf19b24c8fdd65741502', 'code': 0, 'message': 'success', 'data': [{'appid': '', 'name': '', 'is_disable': False, 'auth_list': [{'api_key': '', 'api_secret': ''}], 'desc': '星辰租户'}]}{'sid': 'app0001912f@hf19b24c8fdd65741502', 'code': 0, 'message': 'success', 'data': [{'appid': '', 'name': '星辰租户', 'is_disable': False, 'auth_list': [{'api_key': '', 'api_secret': ''}], 'desc': '星辰租户'}]}
+            app_detail = await _validate_app_auth(inputs.app_id, sp)
+            print(app_detail)
 
-            # Query if already bound
-            timeout = aiohttp.ClientTimeout(total=5)
-            try:
-                is_bound = await _check_binding_status(
-                    auth_get_api_url, params, timeout
-                )
-                if is_bound:
-                    return build_bot_response(
-                        error,
-                        None,
-                        "This capability id is already bound, no need to rebind",
+            # Query app_detail firstly
+            with session_getter(get_db_service()) as session:
+                # Build query parameters
+                params = {
+                    "app_id": inputs.app_id,
+                    "type": "agent",
+                    "ability_id": str(inputs.version_id),
+                }
+                # Query if already bound
+                timeout = aiohttp.ClientTimeout(total=5)
+                try:
+                    is_bound = await _check_binding_status(
+                        auth_get_api_url, params, timeout
                     )
-            except aiohttp.ClientError as e:
-                raise BotAuthFailedExc(f"Failed to query binding status: {str(e)}")
+                    if is_bound:
+                        raise BotAuthFailedExc(
+                            "This capability id is already bound, no need to rebind"
+                        )
+                except aiohttp.ClientError as e:
+                    raise BotAuthFailedExc(f"Failed to query binding status: {str(e)}")
 
-            # If not bound, perform binding operation
-            request_body = {
-                "app_id": inputs.app_id,
-                "type": "agent",
-                "ability_id": str(inputs.version_id),
-            }
+                db_app_detail = (
+                    session.query(AppAuthDetail)
+                    .filter(
+                        AppAuthDetail.release_id == inputs.version_id,
+                        AppAuthDetail.app_id == inputs.app_id,
+                    )
+                    .first()
+                )
+                if db_app_detail:
+                    raise BotAuthFailedExc(
+                        "This capability id is already bound, no need to rebind"
+                    )
 
-            headers = {
-                "x-consumer-username": auth_required_username,
-                "Content-Type": "application/json",
-            }
+                # If not bound, perform binding operation
+                request_body = {
+                    "app_id": inputs.app_id,
+                    "type": "agent",
+                    "ability_id": str(inputs.version_id),
+                }
 
-            try:
-                await _perform_binding(auth_add_api_url, request_body, headers, timeout)
+                headers = {
+                    "x-consumer-username": auth_required_username,
+                    "Content-Type": "application/json",
+                }
+
+                try:
+                    await _perform_binding(
+                        auth_add_api_url, request_body, headers, timeout
+                    )
+                except aiohttp.ClientError as e:
+                    raise BotAuthFailedExc(f"Failed to bind: {str(e)}")
+
+                api_key, api_secret = (
+                    app_detail["data"][0]["auth_list"][0]["api_key"],
+                    app_detail["data"][0]["auth_list"][0]["api_secret"],
+                )
+                db_app_detail = AppAuthDetail(
+                    release_id=inputs.version_id,
+                    app_id=inputs.app_id,
+                    api_key=api_key,
+                    api_secret=api_secret,
+                )
+
+                session.add(db_app_detail)
+                session.commit()
+                session.refresh(db_app_detail)
+
                 return build_bot_response(error, None, "Binding succeeded")
-            except aiohttp.ClientError as e:
-                raise BotAuthFailedExc(f"Failed to bind: {str(e)}")
+
         except BotExc as e:
             error = e
         except Exception as e:  # pylint: disable=broad-exception-caught

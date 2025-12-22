@@ -61,9 +61,9 @@ class TestCustomChatCompletion:
     @pytest.fixture
     def completion(self, chat_inputs: Chat, span: Span) -> CustomChatCompletion:
         """Create CustomChatCompletion instance for testing"""
-        from agent.api.schemas_v2.bot_dsl import Dsl, ModelInputs, ModelPropertiesInputs
+        from agent.api.schemas_v2.bot_dsl import BotDsl, ModelInputs, ModelPropertiesInputs
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",

@@ -64,6 +64,8 @@ class CotRunner(RunnerBase):
                 else COT_SYSTEM_NO_R1_MORE_TEMPLATE
             ),
         )
+        print("----- system -----")
+        print(system_prompt)
         return system_prompt
 
     async def create_user_prompt(self) -> str:

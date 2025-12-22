@@ -1,5 +1,5 @@
 import json
-from typing import Annotated, Any, AsyncGenerator, cast
+from typing import Annotated, Any, AsyncGenerator, cast, List
 
 from common.otlp.trace.span import Span
 from common.service import get_db_service
@@ -9,12 +9,19 @@ from pydantic import ConfigDict
 from starlette.responses import StreamingResponse
 
 from agent.api.schemas_v2.bot_chat_inputs import DebugChat
-from agent.api.schemas_v2.bot_dsl import Dsl
+from agent.api.schemas_v2.bot_dsl import BotDsl
 from agent.api.v1.base_api import CompletionBase
 from agent.domain.models.bot import Bot, BotTenant
-from agent.exceptions.agent_exc import AgentInternalExc
+from agent.exceptions.bot_exc import TenantNotFoundExc, BotNotFoundExc
 from agent.service.builder.debug_chat_builder import DebugChatRunnerBuilder
 from agent.service.runner.debug_chat_runner import DebugChatRunner
+from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.metrics.meter import Meter
+from common.exceptions.base import BaseExc
+from agent.exceptions.agent_exc import AgentInternalExc, AgentNormalExc
+from agent.api.base import RunContext
+import traceback
+from agent.api.schemas_v2.bot_debug_chat_response import BotDebugChatCompletionChunk
 
 debug_chat_router = APIRouter()
 
@@ -63,6 +70,55 @@ class CustomChatCompletion(CompletionBase):
             async for response in self.run_runner(node_trace, meter, span=sp):
                 yield response
 
+    async def run_runner(
+        self, node_trace: NodeTrace, meter: Meter, span: Span
+    ) -> AsyncGenerator[str, None]:
+        with span.start("RunRunner") as sp:
+            error: BaseExc = AgentNormalExc()
+            error_log: str = ""
+            chunk_logs: List[str] = []
+
+            try:
+                runner = await self.build_runner(sp)
+                if runner is None:
+                    raise AgentInternalExc("Failed to build runner")
+
+                async for chunk in runner.run(span=sp, node_trace=node_trace):
+                    chunk.id = span.sid
+                    async for processed_chunk in self.create_sse_chunk(
+                        chunk, chunk_logs
+                    ):
+                        yield processed_chunk
+
+            except BaseExc as e:
+                error = e
+                error_log = traceback.format_exc()
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                error = AgentInternalExc(str(e))
+                error_log = traceback.format_exc()
+
+            finally:
+                context = RunContext(
+                    error=error,
+                    error_log=error_log,
+                    chunk_logs=chunk_logs,
+                    span=sp,
+                    node_trace=node_trace,
+                    meter=meter,
+                )
+                async for final_chunk in self._finalize_run(context):
+                    yield final_chunk
+
+        # return await super().run_runner(node_trace, meter, span)
+
+    async def create_sse_chunk(
+        self, chunk: BotDebugChatCompletionChunk, chunk_logs: List[str]
+    ) -> AsyncGenerator[str, None]:
+        frame_data = chunk.model_dump_json()
+        frame = f"data: {frame_data}\n\n"
+        chunk_logs.append(frame_data)
+        yield frame
+
 
 async def _validate_tenant(x_consumer_username: str) -> None:
     """Validate tenant information"""
@@ -74,7 +130,7 @@ async def _validate_tenant(x_consumer_username: str) -> None:
             .first()
         )
         if not existing_tenant:
-            raise AgentInternalExc(
+            raise TenantNotFoundExc(
                 f"Cannot find tenant id:{x_consumer_username} information"
             )
 
@@ -113,10 +169,10 @@ async def bot_debug_chat(
             # Query Bot table data using bot_id
             bot = session.query(Bot).filter(Bot.id == inputs.bot_id).first()
             if not bot:
-                raise AgentInternalExc(f"Bot with id:{inputs.bot_id} not found")
+                raise BotNotFoundExc(f"Bot with id:{inputs.bot_id} not found")
 
             if inputs.dsl is None:
-                inputs.dsl = Dsl(**json.loads(bot.dsl))
+                inputs.dsl = BotDsl(**json.loads(bot.dsl))
 
             completion = CustomChatCompletion(
                 app_id=x_consumer_username,

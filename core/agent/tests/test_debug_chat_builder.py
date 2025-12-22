@@ -10,7 +10,7 @@ from common.otlp.trace.span import Span
 
 from agent.api.schemas_v2.bot_chat_inputs import DebugChat, MessageInputs
 from agent.api.schemas_v2.bot_dsl import (
-    Dsl,
+    BotDsl,
     KnowledgeInputs,
     ModelInputs,
     ModelPropertiesInputs,
@@ -53,7 +53,7 @@ class TestDebugChatRunnerBuilder:
         """Create DebugChat input instance for testing"""
         from agent.api.schemas_v2.bot_dsl import PluginInputs, RagInputs
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",

@@ -16,9 +16,14 @@ from agent.api.schemas.completion_chunk import (
     ReasonChoiceDeltaToolCall,
     ReasonChoiceDeltaToolCallFunction,
 )
-from agent.engine.nodes.chat.chat_runner import ChatRunner
-from agent.engine.nodes.cot.cot_runner import CotRunner
-from agent.service.plugin.base import BasePlugin
+from agent.engine.bot.runner import BotCotStep, BotRunner, BotAgentResponse
+from agent.api.schemas_v2.bot_debug_chat_response import (
+    BotDebugChatCompletionChunk,
+    BotDebugChatChoice,
+    BotDebugChatChoiceDelta,
+    BotDebugChatChoiceDeltaToolCall,
+    BotDebugChatChoiceDeltaToolCallFunction,
+)
 
 
 class UpdatedNode(Node):
@@ -26,59 +31,34 @@ class UpdatedNode(Node):
 
 
 class DebugChatRunner(BaseModel):
-    """Workflow Agent runner"""
+    """Bot Agent runner"""
 
-    chat_runner: ChatRunner
-    cot_runner: CotRunner
-
-    plugins: Sequence[BasePlugin]
-
-    knowledge_metadata_list: list[Any] = Field(default_factory=list)
+    bot_runner: BotRunner
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     async def run(
         self, span: Span, node_trace: NodeTrace
-    ) -> AsyncGenerator[ReasonChatCompletionChunk, None]:
+    ) -> AsyncGenerator[BotDebugChatCompletionChunk, None]:
         """Execute"""
 
-        if self.knowledge_metadata_list:
-            yield await self.convert_message(
-                AgentResponse(
-                    typ="knowledge_metadata",
-                    content=self.knowledge_metadata_list,
-                    model="",
-                ),
-                span=span,
-                node_trace=node_trace,
-            )
-
-        async for message in self.run_runner(span, node_trace):
+        async for message in self.bot_runner.run(span, node_trace):
             yield await self.convert_message(message, span=span, node_trace=node_trace)
 
-    async def run_runner(
-        self, span: Span, node_trace: NodeTrace
-    ) -> AsyncGenerator[AgentResponse, None]:
-        if not self.plugins:
-            async for message in self.chat_runner.run(span, node_trace):
-                yield message
-        else:
-            async for message in self.cot_runner.run(span, node_trace):
-                yield message
-
     async def convert_message(
-        self, message: AgentResponse, span: Span, node_trace: NodeTrace
-    ) -> ReasonChatCompletionChunk:
-        """Convert AgentResponse to return frame"""
+        self, message: BotAgentResponse, span: Span, node_trace: NodeTrace
+    ) -> BotDebugChatCompletionChunk:
+        """Convert BotAgentResponse to return frame"""
 
-        chunk = ReasonChatCompletionChunk(
+        chunk = BotDebugChatCompletionChunk(
             id="",
-            choices=[ReasonChoice(index=0, delta=ReasonChoiceDelta())],
+            choices=[BotDebugChatChoice(index=0, delta=BotDebugChatChoiceDelta())],
             created=message.created,
-            model=message.model,
-            object="chat.completion.chunk",
             usage=message.usage,
         )
+
+        if message.typ == "tool_call":
+            await self._handle_tool_call(chunk, message, span, node_trace)
 
         if message.typ == "reasoning_content":
             self._handle_reasoning_content(chunk, message)
@@ -107,44 +87,36 @@ class DebugChatRunner(BaseModel):
         if isinstance(message.content, str):
             chunk.choices[0].delta.content = message.content
 
-    def _handle_cot_step(
+    async def _handle_tool_call(
         self,
-        chunk: ReasonChatCompletionChunk,
-        message: AgentResponse,
+        chunk: BotDebugChatCompletionChunk,
+        message: BotAgentResponse,
         span: Span,
         node_trace: NodeTrace,
     ) -> None:
         """Handle CoT step"""
-        if not isinstance(message.content, CotStep):
-            return
 
         content = message.content
-        action_input = content.action_input
-        action_output = content.action_output
-
-        chunk.choices[0].delta.tool_calls = [
-            ReasonChoiceDeltaToolCall(
-                index=0,
-                type=content.tool_type or "tool",
-                reason=content.thought or "",
-                function=ReasonChoiceDeltaToolCallFunction(
-                    name=content.action or "",
-                    arguments=json.dumps(
-                        action_input if action_input else {}, ensure_ascii=False
+        try:
+            chunk.choices[0].delta.tool_calls = [
+                BotDebugChatChoiceDeltaToolCall(
+                    index=0,
+                    type=tool_call["plugin"].typ,
+                    function=BotDebugChatChoiceDeltaToolCallFunction(
+                        name=tool_call["name"],
+                        arguments=tool_call["arguments"],
                     ),
-                    response=json.dumps(
-                        action_output if action_output else {},
-                        ensure_ascii=False,
-                    ),
-                ),
-            )
-        ]
+                )
+                for tool_call in content
+            ]
+        except Exception as e:
+            raise e
 
-        self._handle_plugin_trace(content, span, node_trace)
+        # self._handle_plugin_trace(content, span, node_trace)
 
     def _handle_plugin_trace(
         self,
-        content: CotStep,
+        content: BotCotStep,
         span: Span,
         node_trace: NodeTrace,
     ) -> None:

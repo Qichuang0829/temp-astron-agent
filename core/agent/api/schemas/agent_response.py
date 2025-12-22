@@ -31,3 +31,10 @@ class AgentResponse(BaseModel):
     model: str
     created: int = Field(default_factory=cur_timestamp)
     usage: Optional[CompletionUsage] = Field(default=None)
+
+
+class BotAgentResponse(BaseModel):
+    typ: str
+    content: Any
+    usage: Optional[CompletionUsage] = Field(default=None)
+    created: int = Field(default_factory=cur_timestamp)

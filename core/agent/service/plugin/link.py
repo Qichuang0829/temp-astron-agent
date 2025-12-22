@@ -351,6 +351,8 @@ class LinkPluginFactory(BaseModel):
                 tool_schema_data = json.loads(tool_schema.get("schema", "{}"))
                 for _, path_schema in tool_schema_data.get("paths", {}).items():
                     for _, method_schema in path_schema.items():
+                        print("----- method schema ------")
+                        print(json.dumps(method_schema, ensure_ascii=False))
                         action_name = method_schema.get("operationId", "")  # Tool name
                         action_description = method_schema.get(
                             "description", ""

@@ -30,4 +30,4 @@ def build_bot_response(
         BotResponse: Response object
     """
 
-    return BotResponse(code=error.c, message=message or error.m, data=data)
+    return BotResponse(code=error.c, message=message or error.m, data=data or None)

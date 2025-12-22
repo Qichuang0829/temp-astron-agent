@@ -299,9 +299,9 @@ class TestProtocolSynchronization:
     ) -> None:
         """Test creating a new bot via protocol synchronization"""
         from agent.api.schemas_v2.bot_dsl import ModelInputs, ModelPropertiesInputs
-        from agent.api.schemas_v2.bot_manage_inputs import Dsl
+        from agent.api.schemas_v2.bot_manage_inputs import BotDsl
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",
@@ -337,9 +337,9 @@ class TestProtocolSynchronization:
     ) -> None:
         """Test updating an existing bot via protocol synchronization"""
         from agent.api.schemas_v2.bot_dsl import ModelInputs, ModelPropertiesInputs
-        from agent.api.schemas_v2.bot_manage_inputs import Dsl
+        from agent.api.schemas_v2.bot_manage_inputs import BotDsl
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",
@@ -388,9 +388,9 @@ class TestProtocolSynchronization:
     async def test_protocol_synchronization_auth_failed(self) -> None:
         """Test protocol synchronization when tenant validation fails"""
         from agent.api.schemas_v2.bot_dsl import ModelInputs, ModelPropertiesInputs
-        from agent.api.schemas_v2.bot_manage_inputs import Dsl
+        from agent.api.schemas_v2.bot_manage_inputs import BotDsl
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",
@@ -425,9 +425,9 @@ class TestProtocolSynchronization:
     async def test_protocol_synchronization_exception(self) -> None:
         """Test protocol synchronization when exception occurs"""
         from agent.api.schemas_v2.bot_dsl import ModelInputs, ModelPropertiesInputs
-        from agent.api.schemas_v2.bot_manage_inputs import Dsl
+        from agent.api.schemas_v2.bot_manage_inputs import BotDsl
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",

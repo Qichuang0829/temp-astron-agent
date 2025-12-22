@@ -10,7 +10,7 @@ from common.otlp.trace.span import Span
 
 from agent.api.schemas_v2.bot_chat_inputs import Chat, MessageInputs
 from agent.api.schemas_v2.bot_dsl import (
-    Dsl,
+    BotDsl,
     KnowledgeInputs,
     ModelInputs,
     ModelPropertiesInputs,
@@ -60,11 +60,11 @@ class TestChatRunnerBuilder:
         )
 
     @pytest.fixture
-    def dsl(self) -> Dsl:
+    def dsl(self) -> BotDsl:
         """Create Dsl instance for testing"""
         from agent.api.schemas_v2.bot_dsl import PluginInputs, RagInputs
 
-        return Dsl(
+        return BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",
@@ -89,7 +89,7 @@ class TestChatRunnerBuilder:
         return Span(app_id="test_app", uid="test_uid")
 
     @pytest.fixture
-    def builder(self, chat_inputs: Chat, dsl: Dsl, span: Span) -> ChatRunnerBuilder:
+    def builder(self, chat_inputs: Chat, dsl: BotDsl, span: Span) -> ChatRunnerBuilder:
         """Create Builder instance for testing"""
         return ChatRunnerBuilder(
             app_id="test_app",
@@ -143,7 +143,7 @@ class TestChatRunnerBuilder:
 
     @pytest.mark.asyncio
     async def test_build_with_plugins(
-        self, builder: ChatRunnerBuilder, dsl: Dsl
+        self, builder: ChatRunnerBuilder, dsl: BotDsl
     ) -> None:
         """Test building with plugins from DSL"""
         mock_model = MagicMock()

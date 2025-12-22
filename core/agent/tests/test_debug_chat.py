@@ -47,9 +47,9 @@ class TestCustomChatCompletion:
     @pytest.fixture
     def debug_chat_inputs(self) -> DebugChat:
         """Create DebugChat input instance for testing"""
-        from agent.api.schemas_v2.bot_dsl import Dsl, ModelInputs, ModelPropertiesInputs
+        from agent.api.schemas_v2.bot_dsl import BotDsl, ModelInputs, ModelPropertiesInputs
 
-        dsl = Dsl(
+        dsl = BotDsl(
             name="test_bot",
             model=ModelInputs(
                 name="test_model",
@@ -336,9 +336,9 @@ class TestBotDebugChatEndpoint:
         mock_tenant_session: MagicMock,
     ) -> None:
         """Test bot debug chat endpoint when dsl is already provided"""
-        from agent.api.schemas_v2.bot_dsl import Dsl, ModelInputs, ModelPropertiesInputs
+        from agent.api.schemas_v2.bot_dsl import BotDsl, ModelInputs, ModelPropertiesInputs
 
-        provided_dsl = Dsl(
+        provided_dsl = BotDsl(
             name="provided_bot",
             model=ModelInputs(
                 name="provided_model",
