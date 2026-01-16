@@ -22,10 +22,10 @@ class TestRouterModule:
     """Test api/router module"""
 
     def test_router_v1_basic(self) -> None:
-        """router_v1 should be APIRouter with correct prefix"""
+        """router_v1 should be an APIRouter with the correct prefix"""
         assert isinstance(api_router.router_v1, APIRouter)
         assert api_router.router_v1.prefix == "/agent/v1"
-        # Should contain at least one sub-route (workflow_agent route)
+        # Should include at least one sub-route (workflow_agent route)
         assert api_router.router_v1.routes
 
 
@@ -134,7 +134,7 @@ class TestNodeTracePatch:
         trace.record_start()
         assert trace.start_time > 0
 
-        # record_end should only call parent class set_end, not raise exception
+        # record_end should only call parent set_end without raising
         trace.record_end()
 
     def test_upload_sets_status_and_returns_dump(self) -> None:
@@ -156,6 +156,6 @@ class TestNodeTracePatch:
         )
         status = DummyStatus(1, "error")
         data = trace.upload(status=status, log_caller="x", span=None)
-        # Returns a dictionary after model_dump
+        # The return value is the dictionary from model_dump
         assert isinstance(data, dict)
         assert data.get("status", {}).get("code") == 1

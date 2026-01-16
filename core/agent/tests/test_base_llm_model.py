@@ -64,7 +64,11 @@ class TestBaseLLMModel:
         result = await model.create_completion(messages, stream=True)
 
         model.llm.chat.completions.create.assert_called_once_with(
-            messages=messages, stream=True, model="test_model"
+            messages=messages,
+            stream=True,
+            model="test_model",
+            timeout=90,
+            max_tokens=10000,
         )
         assert result == mock_response
 

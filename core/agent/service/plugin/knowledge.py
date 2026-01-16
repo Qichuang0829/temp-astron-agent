@@ -47,7 +47,9 @@ async def chunk_query(
             if not query_url:
                 raise KnowledgeQueryExc("CHUNK_QUERY_URL is not set")
             async with aiohttp.ClientSession() as session:
-                timeout = aiohttp.ClientTimeout(total=40)
+                timeout = aiohttp.ClientTimeout(
+                    total=int(os.getenv("KNOWLEDGE_CALL_TIMEOUT", "90"))
+                )
                 async with session.post(
                     query_url, json=data, timeout=timeout
                 ) as response:

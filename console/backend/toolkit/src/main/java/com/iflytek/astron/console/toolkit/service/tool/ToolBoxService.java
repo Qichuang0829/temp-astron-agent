@@ -2036,6 +2036,7 @@ public class ToolBoxService extends ServiceImpl<ToolBoxMapper, ToolBox> {
         securityScheme.setType(OpenApiConst.SecuritySchemeType.APIKEY);
         securityScheme.setName(serviceAuthInfo.getParameterName());
         securityScheme.setIn(serviceAuthInfo.getLocation().toLowerCase());
+        securityScheme.setValue(serviceAuthInfo.getServiceToken());
 
         Map<String, SecurityScheme> securitySchemes = new HashMap<>();
         securitySchemes.put(serviceAuthInfo.getParameterName(), securityScheme);

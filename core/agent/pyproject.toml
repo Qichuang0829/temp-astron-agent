@@ -41,6 +41,6 @@ dependencies = [
     "flake8==7.0.0",
     "isort==5.13.2",
     "black==24.4.2",
-    "mypy==1.9.0",
+    "mypy==1.18.2",
     "pylint==3.1.0",
 ]

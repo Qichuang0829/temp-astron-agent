@@ -251,7 +251,7 @@ class PGSqlNode(BaseNode):
             return str(stmt.compile(compile_kwargs={"literal_binds": True}))
         else:
             raise CustomException(
-                err_code=CodeEnum.PG_SQL_NODE_EXECUTION_ERROR,
+                err_code=CodeEnum.PG_SQL_PARAM_ERROR,
                 err_msg="Database DML statement generation failed: WHERE condition is empty",
                 cause_error="Database DML statement generation failed: WHERE condition is empty",
             )
@@ -301,7 +301,7 @@ class PGSqlNode(BaseNode):
             return str(stmt.compile(compile_kwargs={"literal_binds": True}))
         else:
             raise CustomException(
-                err_code=CodeEnum.PG_SQL_NODE_EXECUTION_ERROR,
+                err_code=CodeEnum.PG_SQL_PARAM_ERROR,
                 err_msg="Database DML statement generation failed: WHERE condition is empty",
                 cause_error="Database DML statement generation failed: WHERE condition is empty",
             )

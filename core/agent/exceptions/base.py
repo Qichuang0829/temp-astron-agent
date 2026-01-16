@@ -1,6 +1,6 @@
 class AgentException(Exception):
     """
-    Agent base exception
+    Base exception for agent
     """
 
     def __init__(self, err_const: tuple, message: str = ""):

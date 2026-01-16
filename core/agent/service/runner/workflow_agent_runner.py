@@ -2,9 +2,8 @@ import json
 from typing import Any, AsyncGenerator, Sequence
 
 # Use unified common package import module
-from common.otlp.log_trace.node_log import Data as NodeData
-from common.otlp.log_trace.node_log import NodeLog as Node
-from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.log_trace.node_log import Data, NodeLog
+from common.otlp.log_trace.node_trace_log import NodeTraceLog
 from common.otlp.trace.span import Span
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,10 +20,6 @@ from agent.engine.nodes.cot.cot_runner import CotRunner
 from agent.service.plugin.base import BasePlugin
 
 
-class UpdatedNode(Node):
-    node_name: str = Field(default="")
-
-
 class WorkflowAgentRunner(BaseModel):
     """Workflow Agent runner"""
 
@@ -38,9 +33,9 @@ class WorkflowAgentRunner(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     async def run(
-        self, span: Span, node_trace: NodeTrace
+        self, span: Span, node_trace_log: NodeTraceLog
     ) -> AsyncGenerator[ReasonChatCompletionChunk, None]:
-        """Execute"""
+        """Execute workflow agent runners"""
 
         if self.knowledge_metadata_list:
             yield await self.convert_message(
@@ -50,26 +45,28 @@ class WorkflowAgentRunner(BaseModel):
                     model="",
                 ),
                 span=span,
-                node_trace=node_trace,
+                node_trace_log=node_trace_log,
             )
 
-        async for message in self.run_runner(span, node_trace):
-            yield await self.convert_message(message, span=span, node_trace=node_trace)
+        async for message in self.run_runner(span, node_trace_log):
+            yield await self.convert_message(
+                message, span=span, node_trace_log=node_trace_log
+            )
 
     async def run_runner(
-        self, span: Span, node_trace: NodeTrace
+        self, span: Span, node_trace_log: NodeTraceLog
     ) -> AsyncGenerator[AgentResponse, None]:
         if not self.plugins:
-            async for message in self.chat_runner.run(span, node_trace):
+            async for message in self.chat_runner.run(span, node_trace_log):
                 yield message
         else:
-            async for message in self.cot_runner.run(span, node_trace):
+            async for message in self.cot_runner.run(span, node_trace_log):
                 yield message
 
     async def convert_message(
-        self, message: AgentResponse, span: Span, node_trace: NodeTrace
+        self, message: AgentResponse, span: Span, node_trace_log: NodeTraceLog
     ) -> ReasonChatCompletionChunk:
-        """Convert AgentResponse to return frame"""
+        """Convert AgentResponse to a response chunk"""
 
         chunk = ReasonChatCompletionChunk(
             id="",
@@ -85,7 +82,7 @@ class WorkflowAgentRunner(BaseModel):
         elif message.typ == "content":
             self._handle_content(chunk, message)
         elif message.typ == "cot_step":
-            self._handle_cot_step(chunk, message, span, node_trace)
+            self._handle_cot_step(chunk, message, span, node_trace_log)
         elif message.typ == "log":
             self._handle_log(chunk, message)
         elif message.typ == "knowledge_metadata":
@@ -103,7 +100,7 @@ class WorkflowAgentRunner(BaseModel):
     def _handle_content(
         self, chunk: ReasonChatCompletionChunk, message: AgentResponse
     ) -> None:
-        """Handle normal content"""
+        """Handle regular content"""
         if isinstance(message.content, str):
             chunk.choices[0].delta.content = message.content
 
@@ -112,9 +109,9 @@ class WorkflowAgentRunner(BaseModel):
         chunk: ReasonChatCompletionChunk,
         message: AgentResponse,
         span: Span,
-        node_trace: NodeTrace,
+        node_trace_log: NodeTraceLog,
     ) -> None:
-        """Handle CoT step"""
+        """Handle CoT steps"""
         if not isinstance(message.content, CotStep):
             return
 
@@ -140,15 +137,15 @@ class WorkflowAgentRunner(BaseModel):
             )
         ]
 
-        self._handle_plugin_trace(content, span, node_trace)
+        self._handle_plugin_trace(content, span, node_trace_log)
 
     def _handle_plugin_trace(
         self,
         content: CotStep,
         span: Span,
-        node_trace: NodeTrace,
+        node_trace_log: NodeTraceLog,
     ) -> None:
-        """Handle plugin trace"""
+        """Handle plugin trace data"""
         called_plugin = getattr(content, "plugin", None)
         if not (
             called_plugin is not None
@@ -162,8 +159,15 @@ class WorkflowAgentRunner(BaseModel):
         end_time = getattr(run_result, "end_time", 0)
         thought = getattr(content, "thought", "") if hasattr(content, "thought") else ""
 
-        node_trace.trace.append(
-            UpdatedNode(
+        try:
+            str_action_input = json.dumps(content.action_input, ensure_ascii=False)
+            str_action_output = json.dumps(content.action_output, ensure_ascii=False)
+        except Exception:
+            str_action_input = str(content.action_input)
+            str_action_output = str(content.action_output)
+
+        node_trace_log.trace.append(
+            NodeLog(
                 id=getattr(run_result, "sid", ""),
                 sid=span.sid,
                 node_id=self._determine_node_id(called_plugin),
@@ -174,9 +178,9 @@ class WorkflowAgentRunner(BaseModel):
                 duration=end_time - start_time,
                 running_status=not bool(getattr(run_result, "code", 0)),
                 logs=[thought] if thought else [],
-                data=NodeData(
-                    input=content.action_input if content.action_input else {},
-                    output=content.action_output if content.action_output else {},
+                data=Data(
+                    input={"input": str_action_input},
+                    output={"output": str_action_output},
                 ),
             )
         )
@@ -204,7 +208,7 @@ class WorkflowAgentRunner(BaseModel):
     def _handle_log(
         self, chunk: ReasonChatCompletionChunk, message: AgentResponse
     ) -> None:
-        """Handle log message"""
+        """Handle log messages"""
         chunk.object = "chat.completion.log"
         if isinstance(message.content, str):
             chunk.logs.append(message.content)

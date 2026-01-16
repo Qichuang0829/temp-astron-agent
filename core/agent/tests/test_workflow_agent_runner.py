@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from common.otlp import sid as sid_module
-from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.log_trace.node_trace_log import NodeTraceLog
 from common.otlp.trace.span import Span
 
 from agent.api.schemas.agent_response import AgentResponse, CotStep
@@ -81,9 +81,9 @@ class TestWorkflowAgentRunner:
         return Span(app_id="test_app", uid="test_uid")
 
     @pytest.fixture
-    def node_trace(self) -> NodeTrace:
+    def node_trace(self) -> NodeTraceLog:
         """Create NodeTrace instance for testing"""
-        return NodeTrace(
+        return NodeTraceLog(
             service_id="test_service",
             sid="test_sid",
             app_id="test_app",
@@ -97,7 +97,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_run_with_knowledge_metadata(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test running with knowledge metadata"""
         runner.knowledge_metadata_list = [{"source_id": "doc1", "chunk": []}]
@@ -105,7 +105,7 @@ class TestWorkflowAgentRunner:
         mock_response = AgentResponse(typ="content", content="test", model="test_model")
 
         async def mock_run(
-            span: Span, node_trace: NodeTrace
+            span: Span, node_trace: NodeTraceLog
         ) -> AsyncIterator[AgentResponse]:  # noqa: ARG001
             yield mock_response
 
@@ -119,7 +119,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_run_runner_without_plugins(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test using ChatRunner when no plugins"""
         runner.plugins = []
@@ -127,7 +127,7 @@ class TestWorkflowAgentRunner:
         mock_response = AgentResponse(typ="content", content="test", model="test_model")
 
         async def mock_chat_run(
-            span: Span, node_trace: NodeTrace
+            span: Span, node_trace: NodeTraceLog
         ) -> AsyncIterator[AgentResponse]:  # noqa: ARG001
             yield mock_response
 
@@ -141,7 +141,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_run_runner_with_plugins(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test using CotRunner when plugins exist"""
         mock_response = AgentResponse(
@@ -149,7 +149,7 @@ class TestWorkflowAgentRunner:
         )
 
         async def mock_cot_run(
-            span: Span, node_trace: NodeTrace
+            span: Span, node_trace: NodeTraceLog
         ) -> AsyncIterator[AgentResponse]:  # noqa: ARG001
             yield mock_response
 
@@ -163,7 +163,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_convert_message_reasoning_content(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test converting reasoning content message"""
         message = AgentResponse(
@@ -175,7 +175,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_convert_message_content(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test converting normal content message"""
         message = AgentResponse(typ="content", content="answer", model="test_model")
@@ -185,7 +185,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_convert_message_cot_step(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test converting CoT step message"""
         cot_step = CotStep(
@@ -202,7 +202,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_convert_message_log(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test converting log message"""
         message = AgentResponse(typ="log", content="log message", model="test_model")
@@ -213,7 +213,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_convert_message_knowledge_metadata(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test converting knowledge metadata message"""
         metadata = [{"source_id": "doc1", "chunk": []}]
@@ -227,7 +227,7 @@ class TestWorkflowAgentRunner:
 
     @pytest.mark.asyncio
     async def test_handle_plugin_trace_with_plugin(
-        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTrace
+        self, runner: WorkflowAgentRunner, span: Span, node_trace: NodeTraceLog
     ) -> None:
         """Test handling plugin trace (with plugin)"""
         mock_plugin = MagicMock(spec=BasePlugin)

@@ -43,7 +43,9 @@ class McpPluginRunner(BaseModel):
                 if not run_url:
                     raise RunMcpPluginExc("RUN_MCP_PLUGIN_URL is not set")
                 async with aiohttp.ClientSession() as session:
-                    timeout = aiohttp.ClientTimeout(total=40)
+                    timeout = aiohttp.ClientTimeout(
+                        total=int(os.getenv("MCP_CALL_TIMEOUT", "90"))
+                    )
                     async with session.post(
                         run_url,
                         json=data,

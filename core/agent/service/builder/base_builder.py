@@ -219,10 +219,10 @@ class BaseApiBuilder(BaseModel):
     ) -> BaseLLMModel:
 
         with self.span.start("BuildModel") as sp:
-            # if api_key:
-            #     sk = api_key
-            # else:
-            #     sk = await self.query_maas_sk(app_id, model_name)
+            if api_key:
+                sk = api_key
+            else:
+                sk = await self.query_maas_sk(app_id, model_name)
 
             # Normalize base_url: remove /chat/completions if present
             # OpenAI SDK automatically appends this path
@@ -250,13 +250,11 @@ class BaseApiBuilder(BaseModel):
             sp.add_info_events(
                 {
                     "model": model_name,
-                    "base_url": base_url,
-                    "normalized_base_url": normalized_base_url,
-                    "api_key": api_key,
+                    "base_url": normalized_base_url,
+                    "api_key": sk,
                     "app_id": app_id,
                 }
             )
-
             # Configure HTTP client with SSL and timeout settings
             # Create SSL context
             ssl_context = ssl.create_default_context()
@@ -282,7 +280,7 @@ class BaseApiBuilder(BaseModel):
             model = BaseLLMModel(
                 name=model_name,
                 llm=AsyncOpenAI(
-                    api_key=api_key,
+                    api_key=sk,
                     base_url=normalized_base_url,
                     http_client=http_client,
                     timeout=300.0,  # Overall timeout: 5 minutes

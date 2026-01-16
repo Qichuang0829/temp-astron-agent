@@ -3,22 +3,17 @@ import json
 import time
 from typing import Any, AsyncIterator, List
 
-from common.otlp.log_trace.base import Usage as NodeDataUsage
+from common.otlp.log_trace.base import Usage
 
 # Use unified common package import module
-from common.otlp.log_trace.node_log import Data as NodeData
-from common.otlp.log_trace.node_log import NodeLog as Node
-from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.log_trace.node_log import Data, NodeLog
+from common.otlp.log_trace.node_trace_log import NodeTraceLog
 from common.otlp.trace.span import Span
 from pydantic import BaseModel, Field
 
 from agent.api.schemas.agent_response import AgentResponse, CotStep
 from agent.api.schemas.llm_message import LLMMessage
 from agent.domain.models.base import BaseLLMModel
-
-
-class UpdatedNode(Node):
-    node_name: str = Field(default="")
 
 
 class RunnerBase(BaseModel):
@@ -39,7 +34,7 @@ class RunnerBase(BaseModel):
         return "\n".join(history_lines) or "无"
 
     async def model_general_stream(
-        self, messages: list, span: Span, node_trace: NodeTrace
+        self, messages: list, span: Span, node_trace_log: NodeTraceLog
     ) -> AsyncIterator[AgentResponse]:
 
         with span.start("RunModelStream") as sp:
@@ -59,7 +54,7 @@ class RunnerBase(BaseModel):
             }
             node_data_output: dict[str, Any] = {}
             node_data_config: dict[str, Any] = {}
-            node_data_usage = NodeDataUsage()
+            node_data_usage = Usage()
             async for chunk in self.model.stream(messages, True, sp):
                 if not chunk.choices:
                     continue
@@ -110,8 +105,8 @@ class RunnerBase(BaseModel):
 
             node_end_time = int(round(time.time() * 1000))
             data_llm_output = answers
-            node_trace.trace.append(
-                UpdatedNode(
+            node_trace_log.trace.append(
+                NodeLog(
                     id=node_id,
                     sid=node_sid,
                     node_id=node_node_id,
@@ -122,7 +117,7 @@ class RunnerBase(BaseModel):
                     duration=node_end_time - node_start_time,
                     running_status=node_running_status,
                     llm_output=data_llm_output,
-                    data=NodeData(
+                    data=Data(
                         input=node_data_input if node_data_input else {},
                         output=node_data_output if node_data_output else {},
                         config=node_data_config if node_data_config else {},

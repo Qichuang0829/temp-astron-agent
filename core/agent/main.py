@@ -4,10 +4,14 @@ Agent main entry point
 Load configuration files and start FastAPI service
 """
 
+import asyncio
 import json
 import os
+import platform
+import socket
 import sys
 import time
+from asyncio.subprocess import PIPE
 
 import uvicorn
 from common.initialize.initialize import initialize_services
@@ -32,7 +36,6 @@ def initialize_extensions() -> None:
         "settings_service",
         "log_service",
         "database_service",
-        # "cache_service",
         "kafka_producer_service",
         "otlp_sid_service",
         "otlp_span_service",
@@ -144,10 +147,117 @@ def create_app() -> FastAPI:
     return app
 
 
+async def _get_host_ip_from_hostname_command() -> str | None:
+    """Get host IP using hostname -i command (Linux only)."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "hostname", "-i", stdout=PIPE, stderr=PIPE
+        )
+        out, _ = await proc.communicate()
+        if proc.returncode == 0 and out:
+            ip = out.decode().strip().split()[0]
+            if ip:
+                return ip
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _get_host_ip_from_gethostbyname() -> str | None:
+    """Get host IP using socket.gethostbyname."""
+    try:
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
+        if ip and not ip.startswith("127."):
+            return ip
+    except (OSError, socket.gaierror):
+        pass
+    return None
+
+
+def _get_host_ip_from_getaddrinfo() -> str | None:
+    """Get host IP using socket.getaddrinfo."""
+    try:
+        hostname = socket.gethostname()
+        for fam, _, _, _, sockaddr in socket.getaddrinfo(hostname, None):
+            if fam == socket.AF_INET:
+                candidate = sockaddr[0]
+                if isinstance(candidate, str) and not candidate.startswith("127."):
+                    return candidate
+    except (OSError, socket.gaierror):
+        pass
+    return None
+
+
+async def _get_host_ip() -> str:
+    """Get host IP address using multiple fallback strategies."""
+    system = platform.system().lower()
+
+    # Prefer hostname -i on Linux
+    if system == "linux":
+        ip = await _get_host_ip_from_hostname_command()
+        if ip:
+            return ip
+
+    # Cross-platform fallback using socket
+    ip = _get_host_ip_from_gethostbyname()
+    if ip:
+        return ip
+
+    # Last resort: pick first non-loopback from getaddrinfo
+    ip = _get_host_ip_from_getaddrinfo()
+    if ip:
+        return ip
+
+    return "0.0.0.0"  # Fallback to localhost
+
+
+def _write_watchdog_env(host_ip: str) -> None:
+    """Write watchdog environment file for Linux systems."""
+    with open("/etc/watchdog-env", "w", encoding="utf-8") as f:
+        service_port = os.getenv("SERVICE_PORT", "8700")
+        kong_service = os.getenv("KONG_SERVICE_NAME", "upstream-astron-agent")
+        kong_admin = os.getenv(
+            "KONG_ADMIN_API", "http://172.30.209.27:8000/service_find"
+        )
+        f.write(
+            f"""
+export APP_HOST={host_ip}
+export APP_PORT={service_port}
+export KONG_SERVICE_NAME={kong_service}
+export KONG_ADMIN_API={kong_admin}
+"""
+        )
+
+
+def _print_env_vars(host_ip: str) -> None:
+    """Print environment variables for non-Linux systems."""
+    service_port = os.getenv("SERVICE_PORT", "8700")
+    kong_service = os.getenv("KONG_SERVICE_NAME", "upstream-astron-agent")
+    kong_admin = os.getenv("KONG_ADMIN_API", "http://172.30.209.27:8000/service_find")
+    print(f"""export APP_HOST={host_ip}""")
+    print(f"""export APP_PORT={service_port}""")
+    print(f"""export KONG_SERVICE_NAME={kong_service}""")
+    print(f"""export KONG_ADMIN_API={kong_admin}""")
+
+
+async def _log_ready_after_delay() -> None:
+    """Log ready status after delay with host IP information."""
+    host_ip = await _get_host_ip()
+    system = platform.system().lower()
+    # Prefer hostname -i on Linux
+    if system == "linux":
+        _write_watchdog_env(host_ip)
+    else:
+        _print_env_vars(host_ip)
+
+
 if __name__ == "__main__":
     logger.debug(f"current platform {sys.platform}")
     # app = asyncio.run(create_app())
     initialize_extensions()
+
+    asyncio.run(_log_ready_after_delay())
 
     uvicorn.run(
         app="main:create_app",

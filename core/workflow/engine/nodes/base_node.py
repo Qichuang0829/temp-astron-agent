@@ -2,8 +2,9 @@ import asyncio
 import base64
 import json
 import os
+import time
 from abc import abstractmethod
-from asyncio import Queue
+from asyncio import Event
 from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -81,8 +82,8 @@ class BaseNode(BaseModel):
     node_id: str = ""
     _private_config: PrivateConfig = PrivateAttr(default_factory=PrivateConfig)
     retry_config: RetryConfig = Field(default_factory=RetryConfig)
-    stream_node_first_token: Queue = Field(
-        default_factory=lambda: Queue(maxsize=1)
+    stream_node_first_token: Event = Field(
+        default_factory=Event
     )  # Event to track if streaming node has sent first token
     remarkVisible: bool = False
     remark: str = ""
@@ -138,10 +139,10 @@ class BaseNode(BaseModel):
             if not variable_pool.get_stream_node_has_sent_first_token(node_id):
                 # Mark that streaming node has sent first token
                 variable_pool.set_stream_node_has_sent_first_token(node_id)
-            if self.stream_node_first_token.empty():
+            if not self.stream_node_first_token.is_set():
                 # Mark that streaming output first frame has been sent,
                 # triggering engine to set exception branches as inactive
-                self.stream_node_first_token.put_nowait(True)
+                self.stream_node_first_token.set()
             if not msg_or_end_node_deps:
                 # No node dependencies during single node debugging
                 return
@@ -967,7 +968,7 @@ class BaseOutputNode(BaseNode):
         dep_var_name = variable_pool.get_variable_ref_node_id(
             self.node_id, template_unit.key, span=span
         ).ref_var_name
-        is_reasoning = dep_var_name == "REASONING_CONTENT"
+        is_reasoning = dep_var_name.upper() == "REASONING_CONTENT"
 
         if not is_reasoning:
             # If it's an LLM node, get values from message queue or from llm_output_cache
@@ -1034,6 +1035,8 @@ class BaseLLMNode(BaseNode):
     :param chat_ai: Chat AI instance
     """
 
+    _private_config = PrivateConfig()
+
     domain: str = Field(...)
     appId: str = Field(...)
     apiKey: str = Field(default="")
@@ -1057,7 +1060,7 @@ class BaseLLMNode(BaseNode):
     searchDisable: bool = Field(default=True)
     extraParams: dict = Field(default_factory=dict)
 
-    def _get_chat_ai(self) -> ChatAI:
+    def _get_chat_ai(self, uid: str = "") -> ChatAI:
         """
         Get or create the ChatAI instance for this LLM node.
 
@@ -1083,7 +1086,7 @@ class BaseLLMNode(BaseNode):
             max_tokens=self.maxTokens if hasattr(self, "maxTokens") else None,
             top_k=self.topK if hasattr(self, "topK") else None,
             patch_id=self.patch_id,
-            uid=self.uid,
+            uid=uid or str(time.time()),
             stream_node_first_token=self.stream_node_first_token,
         )
 
@@ -1248,7 +1251,9 @@ class BaseLLMNode(BaseNode):
         :param event_log_node_trace: Node trace logging
         :return: Tuple containing (token_usage, response_text, reasoning_content, processed_history)
         """
-        chat_ai = self._get_chat_ai()
+        chat_ai = self._get_chat_ai(
+            uid=variable_pool.system_params.get(ParamKey.Uid, default="")
+        )
         system_user_msg = self._process_history(
             user_input=prompt_template,
             history=history_chat,
@@ -1277,7 +1282,7 @@ class BaseLLMNode(BaseNode):
                 timeout=(
                     self.retry_config.timeout
                     if self.retry_config.should_retry
-                    else None
+                    else self._private_config.timeout
                 ),
                 search_disable=self.searchDisable,
             ):
@@ -1285,6 +1290,9 @@ class BaseLLMNode(BaseNode):
                 status, content, reasoning_content, token_usage = (
                     self._get_chat_ai().decode_message(msg)
                 )
+                # Mark streaming output first frame has been sent, trigger engine to set exception branches as inactive
+                if not self.stream_node_first_token.is_set():
+                    self.stream_node_first_token.set()
                 if reasoning_content:
                     reasoning_contents.append(reasoning_content)
                 if stream and self.respFormat != RespFormatEnum.JSON.value:
@@ -1359,10 +1367,6 @@ class BaseLLMNode(BaseNode):
                 # As long as put_llm_content method is executed, it proves LLM has sent first frame,
                 # so set has_sent_first_token to True
                 variable_pool.set_stream_node_has_sent_first_token(node_id)
-            if self.stream_node_first_token.empty():
-                self.stream_node_first_token.put_nowait(
-                    True
-                )  # Mark streaming output first frame has been sent, trigger engine to set exception branches as inactive
             if not msg_or_end_node_deps:
                 # No node dependencies during single node debugging
                 return

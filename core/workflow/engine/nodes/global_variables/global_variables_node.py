@@ -152,12 +152,16 @@ class GlobalVariablesNode(BaseNode):
             inputs: dict = {}
             outputs: dict = {}
             flow_id: str = variable_pool.system_params.get(ParamKey.FlowId)
+            chat_id: str = variable_pool.system_params.get(ParamKey.ChatId)
+            uid: str = variable_pool.system_params.get(ParamKey.Uid)
+            app_id: str = variable_pool.system_params.get(ParamKey.AppId)
+
             # Build Redis key components for cache operations
             redis_key = {
                 "flow_id": flow_id,
-                "uid": span.uid,
-                "app_id": span.app_id,
-                "chat_id": variable_pool.chat_id,
+                "uid": uid,
+                "app_id": app_id,
+                "chat_id": chat_id,
             }
             span.add_info_events(
                 {"redis_key": json.dumps(redis_key, ensure_ascii=False)}
@@ -166,9 +170,9 @@ class GlobalVariablesNode(BaseNode):
             # Initialize variable manager for cache operations
             var_manager = VariablesManage(
                 flow_id=flow_id,
-                uid=span.uid,
-                app_id=span.app_id,
-                chat_id=variable_pool.chat_id,
+                uid=uid,
+                app_id=app_id,
+                chat_id=chat_id,
             )
             # Handle 'set' operation: store input variables as global variables
             if self.method == "set":
