@@ -255,7 +255,7 @@ class TestAuthMiddleware:
             mock_cache = {"workflow:app:api_key:test_key": "cached_app_id"}
             mock_get_cache.return_value = mock_cache
 
-            result = await auth_middleware._get_app_id_with_cache("test_key")
+            result = auth_middleware._get_app_id_with_cache("test_key")
 
             assert result == "cached_app_id"
 
@@ -267,7 +267,7 @@ class TestAuthMiddleware:
             mock_cache: dict = {}
             mock_get_cache.return_value = mock_cache
 
-            await auth_middleware._set_app_id_with_cache("test_key", "test_app_id")
+            auth_middleware._set_app_id_with_cache("test_key", "test_app_id")
 
             assert mock_cache["workflow:app:api_key:test_key"] == "test_app_id"
 
@@ -476,7 +476,7 @@ class TestAuthMiddleware:
         with patch.object(auth_middleware, "_get_app_id_with_cache") as mock_get_cache:
             mock_get_cache.return_value = None
 
-            with patch("requests.get") as mock_get:
+            with patch("httpx.AsyncClient.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {
@@ -521,7 +521,7 @@ class TestAuthMiddleware:
                 ) as mock_get_cache:
                     mock_get_cache.return_value = None
 
-                    with patch("requests.get") as mock_get:
+                    with patch("httpx.AsyncClient.get") as mock_get:
                         mock_response = Mock()
                         mock_response.status_code = 404
                         mock_response.text = "Not found"
@@ -572,7 +572,7 @@ class TestAuthMiddleware:
         with patch.object(auth_middleware, "_get_app_id_with_cache") as mock_get_cache:
             mock_get_cache.return_value = None
 
-            with patch("requests.get") as mock_get:
+            with patch("httpx.AsyncClient.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 404
                 mock_response.text = "Not found"
@@ -613,7 +613,7 @@ class TestAuthMiddleware:
         with patch.object(auth_middleware, "_get_app_id_with_cache") as mock_get_cache:
             mock_get_cache.return_value = None
 
-            with patch("requests.get") as mock_get:
+            with patch("httpx.AsyncClient.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {
@@ -654,7 +654,7 @@ class TestAuthMiddleware:
         with patch.object(auth_middleware, "_get_app_id_with_cache") as mock_get_cache:
             mock_get_cache.return_value = None
 
-            with patch("requests.get") as mock_get:
+            with patch("httpx.AsyncClient.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {"code": 0, **response_data}
@@ -694,7 +694,7 @@ class TestAuthMiddleware:
         with patch.object(auth_middleware, "_get_app_id_with_cache") as mock_get_cache:
             mock_get_cache.return_value = None
 
-            with patch("requests.get") as mock_get:
+            with patch("httpx.AsyncClient.get") as mock_get:
                 mock_response = Mock()
                 mock_response.status_code = 200
                 mock_response.json.return_value = {"code": 0, **response_data}
@@ -723,7 +723,7 @@ class TestAuthMiddleware:
             mock_get_cache.return_value = mock_cache
 
             with pytest.raises(KeyError):
-                await auth_middleware._get_app_id_with_cache("nonexistent_key")
+                auth_middleware._get_app_id_with_cache("nonexistent_key")
 
     @patch.dict(
         os.environ,
@@ -744,7 +744,7 @@ class TestAuthMiddleware:
             with patch.object(auth_middleware, "_gen_app_auth_header") as mock_gen_auth:
                 mock_gen_auth.return_value = {"Authorization": "test_header"}
 
-                with patch("requests.get") as mock_get:
+                with patch("httpx.AsyncClient.get") as mock_get:
                     mock_response = Mock()
                     mock_response.status_code = 200
                     mock_response.json.return_value = {

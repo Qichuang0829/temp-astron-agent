@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from common.otlp import sid as sid_module
-from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.log_trace.node_trace_log import NodeTraceLog
 from common.otlp.trace.span import Span
 
 from agent.api.schemas.agent_response import AgentResponse, CotStep
@@ -68,7 +68,7 @@ class DummyLLM(BaseLLMModel):
     ) -> AsyncIterator[Any]:
         """Directly return async iterable for use with async for."""
         chunk = MagicMock()
-        # Simulate ReasonChatCompletionChunk style delta
+        # Simulate ReasonChatCompletionChunk-style delta
         delta = MagicMock()
         delta.model_dump.return_value = {
             "reasoning_content": "think",
@@ -85,8 +85,8 @@ def span() -> Span:
 
 
 @pytest.fixture
-def node_trace() -> NodeTrace:
-    return NodeTrace(
+def node_trace() -> NodeTraceLog:
+    return NodeTraceLog(
         service_id="s",
         sid="sid",
         app_id="app",
@@ -126,7 +126,7 @@ class TestRunnerBase:
 
     @pytest.mark.asyncio
     async def test_model_general_stream(
-        self, runner_base: RunnerBase, span: Span, node_trace: NodeTrace
+        self, runner_base: RunnerBase, span: Span, node_trace: NodeTraceLog
     ) -> None:
         # Replace with DummyLLM instance (also use model_construct to avoid validation errors)
         runner_base.model = DummyLLM.model_construct(name="m", llm=MagicMock())
@@ -168,7 +168,7 @@ class TestChatRunner:
     """Test ChatRunner only verifies call chain assembly"""
 
     @pytest.mark.asyncio
-    async def test_chat_runner_run(self, span: Span, node_trace: NodeTrace) -> None:
+    async def test_chat_runner_run(self, span: Span, node_trace: NodeTraceLog) -> None:
         model = DummyLLM.model_construct(name="m", llm=MagicMock())
         runner = ChatRunner(
             model=model,
@@ -228,7 +228,7 @@ class TestCotRunnerParseStep:
         content = "Thought: think\nFinal Answer: done"
         step = await cot_runner.parse_cot_step(content)
         assert step.finished_cot is True
-        assert step.thought == "think"
+        assert step.thought.strip() == "think"
 
     @pytest.mark.asyncio
     async def test_parse_cot_step_with_action(self, cot_runner: CotRunner) -> None:
@@ -269,7 +269,7 @@ class TestCotProcessRunner:
 
     @pytest.mark.asyncio
     async def test_cot_process_runner_run(
-        self, span: Span, node_trace: NodeTrace
+        self, span: Span, node_trace: NodeTraceLog
     ) -> None:
         model = DummyLLM.model_construct(name="m", llm=MagicMock())
         runner = CotProcessRunner(

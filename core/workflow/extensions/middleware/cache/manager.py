@@ -56,7 +56,9 @@ class RedisCache(BaseCacheService, Service):
                 host = match.group(1)
                 port = match.group(2)
                 cluster_nodes.append({"host": host, "port": port})
-        return RedisCluster(startup_nodes=cluster_nodes, password=password)
+        return RedisCluster(
+            startup_nodes=cluster_nodes, password=password, health_check_interval=30
+        )
 
     def init_redis(self, addr: str, password: str) -> Any:
         """

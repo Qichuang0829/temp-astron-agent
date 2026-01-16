@@ -149,7 +149,9 @@ class LinkPluginRunner(BaseModel):
                 run_url = os.getenv("RUN_LINK_URL")
                 if not run_url:
                     raise RunToolExc("RUN_LINK_URL is not set")
-                timeout = aiohttp.ClientTimeout(total=40)
+                timeout = aiohttp.ClientTimeout(
+                    total=int(os.getenv("LINK_CALL_TIMEOUT", "90"))
+                )
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         run_url,

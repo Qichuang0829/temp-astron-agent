@@ -95,14 +95,13 @@ def iteration_array(content: Any, schemas: dict, key_list: list) -> Any:
 
                 # Ensure mapping_value is iterable list
                 mapping_value = cast(list, mapping_value)
-                return [
-                    iteration_array(
-                        value.get(key, schema_type_default_value.get(key_type)),
-                        mapping_schema,
-                        key_list[key_i:],
+                # Only take first element and continue processing
+                if len(mapping_value) > 0:
+                    mapping_value = mapping_value[0].get(
+                        key, schema_type_default_value.get(key_type)
                     )
-                    for value in mapping_value
-                ]
+                else:
+                    mapping_value = schema_type_default_value.get(key_type)
             else:
                 return mapping_value
         elif key_type == "object":
@@ -165,6 +164,9 @@ class ParamKey(str, Enum):
     FlowId = "flow_id"
     FlowOutputMode = "flow_output_mode"
     IsRelease = "is_release"
+    ChatId = "chat_id"
+    Uid = "uid"
+    AppId = "app_id"
 
 
 class SystemParams:
@@ -179,13 +181,14 @@ class SystemParams:
         self, key: ParamKey, value: Any, *, node_id: Optional[str] = None
     ) -> "SystemParams":
         """
-        Set a system parameter value.
+        Set system parameter value(s).
 
         :param key: Parameter key
-        :param value: Parameter value
+        :param value: Parameter value (ignored if key is a dict)
         :param node_id: Optional node ID for node-specific parameters
         :return: Self for method chaining
         """
+
         if node_id is None:
             self._data[key] = value
         else:
@@ -481,8 +484,6 @@ class VariablePool:
         self.do_validate(
             node_id=node_id, key_name_list=key_name_list, outputs=value, span=span
         )
-        # Generate chat_id from span
-        self.chat_id = span.chat_id
         for key in key_name_list:
             mapping_key = assemble_mapping_key(node_id, key)
             if mapping_key not in self.output_variable_mapping:
@@ -574,17 +575,17 @@ class VariablePool:
                     key_type = cast(str, mapping_schema.get("type", ""))
 
                     mapping_value = cast(list, mapping_value)
-                    mapping_value = [
-                        iteration_array(
-                            cast(dict, value).get(
-                                key, schema_type_default_value.get(key_type)
-                            ),
-                            mapping_schema,
-                            key_name_list[key_i:],
-                        )
-                        for value in mapping_value
-                    ]
-                    return mapping_value
+                    if not mapping_value:
+                        return schema_type_default_value.get(key_type)
+
+                    first_value = mapping_value[0]
+                    return iteration_array(
+                        cast(dict, first_value).get(
+                            key, schema_type_default_value.get(key_type)
+                        ),
+                        mapping_schema,
+                        key_name_list[key_i:],
+                    )
                 else:
                     return mapping_value
             elif key_type == "object":

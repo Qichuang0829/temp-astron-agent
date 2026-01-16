@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 from common.otlp import sid as sid_module
@@ -19,6 +20,7 @@ from agent.service.builder.base_builder import (
     RunnerParams,
 )
 from agent.service.plugin.base import BasePlugin
+from agent.service.plugin.base import BasePlugin as RealBasePlugin
 
 
 @dataclass
@@ -160,7 +162,6 @@ class TestBaseApiBuilder:
     async def test_build_cot_runner(self, builder: BaseApiBuilder) -> None:
         """Test building CotRunner"""
         mock_model = BaseLLMModel.model_construct(name="m", llm=MagicMock())
-        from agent.service.plugin.base import BasePlugin as RealBasePlugin
 
         mock_plugin = RealBasePlugin(
             name="p",
@@ -260,8 +261,11 @@ class TestBaseApiBuilder:
             api_key="test_key",
         )
 
-        # Verify base_url is normalized
+        # Verify base_url is normalized by AsyncOpenAI (removes /chat/completions)
         assert "/chat/completions" not in str(model.llm.base_url)
+        # Verify URL hostname using proper URL parsing to avoid security issues
+        parsed_url = urlparse(str(model.llm.base_url))
+        assert parsed_url.netloc == "api.test.com"
 
     @pytest.mark.asyncio
     async def test_create_model_normalize_base_url_completions(
@@ -275,8 +279,11 @@ class TestBaseApiBuilder:
             api_key="test_key",
         )
 
-        # Verify base_url is normalized
+        # Verify base_url is normalized by AsyncOpenAI (removes /completions)
         assert "/completions" not in str(model.llm.base_url)
+        # Verify URL hostname using proper URL parsing to avoid security issues
+        parsed_url = urlparse(str(model.llm.base_url))
+        assert parsed_url.netloc == "api.test.com"
 
     @pytest.mark.asyncio
     async def test_create_model_ssl_verify_enabled(

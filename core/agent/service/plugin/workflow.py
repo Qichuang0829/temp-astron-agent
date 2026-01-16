@@ -128,7 +128,7 @@ class WorkflowPluginRunner(BaseModel):
 
             try:
                 response = await flow_client.chat.completions.create(
-                    **params, timeout=40
+                    **params, timeout=int(os.getenv("WORKFLOWS_CALL_TIMEOUT", "90"))
                 )
                 async for chunk in response:
                     chunk_data = chunk.model_dump()

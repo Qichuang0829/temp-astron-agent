@@ -247,8 +247,10 @@ class Span:
                     f"{str(uuid.uuid4())}", value_bytes
                 )
                 value = f"trace_link: {trace_link}"
-            except Exception:
-                value = "Content too large, failed to upload to OSS storage"
+            except Exception as e:
+                value = (
+                    f"Content too large, failed to upload to OSS storage, error: {e}"
+                )
 
         # Add INFO event to span
         self.get_otlp_span().add_event("INFO", attributes={"INFO LOG": value})
@@ -281,9 +283,9 @@ class Span:
                     f"{str(uuid.uuid4())}", value_bytes
                 )
                 attributes = {"trace_link": trace_link}
-            except Exception:
+            except Exception as e:
                 attributes = {
-                    "error": "Content too large, failed to upload to OSS storage"
+                    "error": f"Content too large, failed to upload to OSS storage, error: {e}"
                 }
 
         # Add INFO event to span

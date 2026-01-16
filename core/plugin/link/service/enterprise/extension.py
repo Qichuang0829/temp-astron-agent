@@ -73,7 +73,7 @@ def register_mcp(
                 uid=span_context.uid,
                 chat_id=span_context.sid,
                 sub="spark-link",
-                caller="",
+                caller="register_mcp",
                 log_caller="mcp",
                 question=json.dumps(run_params_list, ensure_ascii=False),
             )

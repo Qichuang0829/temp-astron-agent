@@ -1,3 +1,4 @@
+import os
 from typing import Any, AsyncIterator, Optional
 
 from common.otlp.trace.span import Span
@@ -19,6 +20,8 @@ class BaseLLMModel(BaseModel):
             messages=messages,
             stream=stream,
             model=self.name,
+            timeout=int(os.getenv("DEFAULT_LLM_TIMEOUT", "90")),
+            max_tokens=int(os.getenv("DEFAULT_LLM_MAX_TOKEN", "10000")),
         )
 
     def _log_messages_to_span(self, sp: Span, messages: list) -> None:

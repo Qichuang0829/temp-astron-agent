@@ -17,6 +17,7 @@ from workflow.engine.entities.history import EnableChatHistoryV2, History
 from workflow.engine.entities.msg_or_end_dep_info import MsgOrEndDepInfo
 from workflow.engine.entities.node_entities import NodeType
 from workflow.engine.entities.output_mode import EndNodeOutputModeEnum
+from workflow.engine.entities.private_config import PrivateConfig
 from workflow.engine.entities.variable_pool import ParamKey, VariablePool
 from workflow.engine.nodes.base_node import BaseNode
 from workflow.engine.nodes.entities.node_run_result import (
@@ -39,10 +40,11 @@ class FlowNode(BaseNode):
     enabling workflow composition and reusability.
     """
 
+    _private_config = PrivateConfig()
+
     # Flow configuration parameters
     flowId: str = Field(..., min_length=1)  # Target flow ID to execute
     appId: str = Field(..., min_length=1)  # Application ID for authentication
-    uid: str = Field(..., min_length=1)  # User ID for the flow execution
 
     # Chat history configuration for conversation context
     enableChatHistoryV2: EnableChatHistoryV2 = Field(
@@ -208,7 +210,9 @@ class FlowNode(BaseNode):
 
             # Configure timeout based on retry settings
             interval_timeout = (
-                self.retry_config.timeout if self.retry_config.should_retry else None
+                self.retry_config.timeout
+                if self.retry_config.should_retry
+                else self._private_config.timeout
             )
 
             # Establish SSE connection with appropriate timeouts
@@ -313,6 +317,9 @@ class FlowNode(BaseNode):
         # Initialize request headers
         headers = {"Content-Type": "application/json"}
 
+        chat_id: str = variable_pool.system_params.get(ParamKey.ChatId, default="")
+        uid: str = variable_pool.system_params.get(ParamKey.Uid, default="")
+
         # Process chat history if enabled
         history = []
         if self.enableChatHistoryV2.is_enabled:
@@ -335,9 +342,10 @@ class FlowNode(BaseNode):
         # Construct request body with flow parameters
         req_body = {
             "flow_id": self.flowId,
-            "uid": self.uid,
+            "uid": uid,
             "parameters": origin_inputs,
             "ext": {},
+            "chat_id": chat_id,
             "stream": True,
             "history": history,
         }

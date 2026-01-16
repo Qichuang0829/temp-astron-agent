@@ -224,8 +224,8 @@ def _update_flow_data(db_flow: Flow, publish_input: PublishInput) -> None:
         in [ReleaseStatus.PUBLISH.value, ReleaseStatus.PUBLISH_API.value]
         and publish_input.data
     ):
-        db_flow.data = publish_input.data.model_dump()
-        db_flow.release_data = publish_input.data.model_dump()
+        db_flow.data = publish_input.data.model_dump(by_alias=True)
+        db_flow.release_data = publish_input.data.model_dump(by_alias=True)
 
 
 def _handle_version(

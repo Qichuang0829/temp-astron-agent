@@ -14,7 +14,7 @@ from agent.api.schemas.base_inputs import BaseInputs, MetaDataInputs
 from agent.api.schemas.completion_chunk import ReasonChatCompletionChunk
 from agent.api.schemas.llm_message import LLMMessage
 from agent.api.schemas.node_trace_patch import NodeTracePatch as NodeTrace
-from agent.api.v1.base_api import CompletionBase, RunContext, json_serializer
+from agent.api.v1.base_api import CompletionBase, json_serializer
 from agent.exceptions.agent_exc import AgentInternalExc, AgentNormalExc
 
 
@@ -189,79 +189,6 @@ class TestCompletionBase:
         assert len(chunk_logs) == 1
 
     @pytest.mark.asyncio
-    async def test_finalize_run_with_error(
-        self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
-    ) -> None:
-        """Test error handling when finalizing run"""
-        error = AgentInternalExc("test error")
-        error_log = "traceback content"
-        chunk_logs: list[str] = ['{"chunk": "data"}']
-        meter = Meter(app_id="test_app", func="test_func")
-
-        context = RunContext(
-            error=error,
-            error_log=error_log,
-            chunk_logs=chunk_logs,
-            span=span,
-            node_trace=node_trace,
-            meter=meter,
-        )
-
-        results = []
-        async for result in completion._finalize_run(context):
-            results.append(result)
-
-        assert len(results) >= 2  # stop chunk + done
-        assert any("data: [DONE]" in r for r in results)
-
-    @pytest.mark.asyncio
-    async def test_finalize_run_with_usage(
-        self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
-    ) -> None:
-        """Test finalizing run with usage statistics"""
-        from common.otlp.log_trace.base import Usage
-        from common.otlp.log_trace.node_log import Data as NodeData
-        from common.otlp.log_trace.node_log import NodeLog as Node
-
-        # Add node with usage
-        node = Node(
-            id="node1",
-            sid=span.sid,
-            node_id="node1",
-            node_name="test",
-            node_type="LLM",
-            start_time=1000,
-            end_time=2000,
-            duration=1000,
-            running_status=True,
-            data=NodeData(
-                usage=Usage(
-                    completion_tokens=10,
-                    prompt_tokens=20,
-                    total_tokens=30,
-                    question_tokens=0,
-                )
-            ),
-        )
-        node_trace.trace = [node]
-
-        error = AgentNormalExc()
-        context = RunContext(
-            error=error,
-            error_log="",
-            chunk_logs=[],
-            span=span,
-            node_trace=node_trace,
-            meter=Meter(app_id="test", func="test"),
-        )
-
-        results = []
-        async for result in completion._finalize_run(context):
-            results.append(result)
-
-        assert len(results) >= 2
-
-    @pytest.mark.asyncio
     async def test_run_runner_success(
         self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
     ) -> None:
@@ -320,6 +247,127 @@ class TestCompletionBase:
 
             # Should produce error response
             assert len(results) > 0
+
+    @pytest.mark.asyncio
+    async def test_run_runner_with_base_exc_error(
+        self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
+    ) -> None:
+        """Test BaseExc exception handling in run_runner"""
+        mock_runner = AsyncMock()
+        mock_runner.run = AsyncMock(side_effect=AgentInternalExc("test base error"))
+
+        with patch.object(ConcreteCompletion, "build_runner", return_value=mock_runner):
+            results = []
+            async for result in completion.run_runner(
+                node_trace, Meter("app", "func"), span
+            ):
+                results.append(result)
+
+            # Should produce error response with stop chunk and done
+            assert len(results) >= 2
+            assert any("data: [DONE]" in r for r in results)
+
+    @pytest.mark.asyncio
+    async def test_run_runner_with_usage_statistics(
+        self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
+    ) -> None:
+        """Test usage statistics aggregation from node_trace"""
+        from common.otlp.log_trace.base import Usage
+        from common.otlp.log_trace.node_log import Data, NodeLog
+
+        # Add node with usage
+        node = NodeLog(
+            id="node1",
+            sid=span.sid,
+            node_id="node1",
+            node_name="test",
+            node_type="LLM",
+            start_time=1000,
+            end_time=2000,
+            duration=1000,
+            running_status=True,
+            data=Data(
+                usage=Usage(
+                    completion_tokens=10,
+                    prompt_tokens=20,
+                    total_tokens=30,
+                    question_tokens=0,
+                )
+            ),
+        )
+        node_trace.trace = [node]
+
+        # Mock runner that completes successfully
+        mock_runner = AsyncMock()
+
+        async def mock_run_generator() -> AsyncIterator[MagicMock]:
+            # Empty generator - no chunks, just to trigger cleanup
+            if False:  # pragma: no cover
+                yield
+
+        mock_runner.run = AsyncMock(return_value=mock_run_generator())
+
+        with patch.object(ConcreteCompletion, "build_runner", return_value=mock_runner):
+            results = []
+            async for result in completion.run_runner(
+                node_trace, Meter(app_id="test", func="test"), span
+            ):
+                results.append(result)
+
+            # Should produce stop chunk + done with usage statistics
+            assert len(results) >= 2
+            assert any("data: [DONE]" in r for r in results)
+
+    @pytest.mark.asyncio
+    async def test_run_runner_error_handling_with_sid(
+        self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
+    ) -> None:
+        """Test error handling adds sid to error message when error code is not zero"""
+        mock_runner = AsyncMock()
+        mock_runner.run = AsyncMock(side_effect=AgentInternalExc("test error"))
+
+        with patch.object(ConcreteCompletion, "build_runner", return_value=mock_runner):
+            results = []
+            async for result in completion.run_runner(
+                node_trace, Meter("app", "func"), span
+            ):
+                results.append(result)
+
+            # Should produce error response
+            assert len(results) >= 2
+            # Error message should contain sid
+            results_str = "".join(results)
+            assert span.sid in results_str or "test error" in results_str
+
+    @pytest.mark.asyncio
+    async def test_run_runner_always_produces_stop_and_done(
+        self, completion: ConcreteCompletion, span: Span, node_trace: NodeTrace
+    ) -> None:
+        """Test that run_runner always produces stop chunk and done marker"""
+        mock_runner = AsyncMock()
+
+        async def mock_run_generator() -> AsyncIterator[MagicMock]:
+            # Empty generator
+            if False:  # pragma: no cover
+                yield
+
+        mock_runner.run = AsyncMock(return_value=mock_run_generator())
+
+        with patch.object(ConcreteCompletion, "build_runner", return_value=mock_runner):
+            results = []
+            async for result in completion.run_runner(
+                node_trace, Meter("app", "func"), span
+            ):
+                results.append(result)
+
+            # Should always produce at least stop chunk and done
+            assert len(results) >= 2
+            assert any("data: [DONE]" in r for r in results)
+            # Should have stop chunk (contains code and message)
+            results_str = "".join(results)
+            assert (
+                "chat.completion.chunk" in results_str or "code" in results_str.lower()
+            )
 
     @pytest.mark.asyncio
     async def test_create_chunk(self) -> None:

@@ -10,6 +10,9 @@ from loguru import logger
 from plugin.link.api.router import router
 from plugin.link.consts import const
 from plugin.link.domain.models.manager import init_data_base
+from plugin.link.service.community.tools.http.execution_server import (
+    init_kafka_send_workers,
+)
 from plugin.link.utils.json_schemas.read_json_schemas import (
     load_create_tool_schema,
     load_http_run_schema,
@@ -94,6 +97,17 @@ class SparkLinkServer:
         ]
         initialize_services(services=need_init_services)
 
+        try:
+            import asyncio
+
+            from plugin.link.extension.gateway.watchdog import setup_watchdog
+
+            asyncio.run(setup_watchdog())
+        except (ModuleNotFoundError, ImportError):
+            pass
+        except Exception as e:
+            print(f"[Service] ⚠️  gateway watchdog setup exception:{str(e)}")
+
     @staticmethod
     def start_uvicorn() -> None:
         """
@@ -140,6 +154,7 @@ def spark_link_app() -> FastAPI:
     load_tool_debug_schema()
     load_mcp_register_schema()
     spark_link_init_sid()
+    init_kafka_send_workers()
     app = FastAPI()
     app.include_router(router)
     logger.error("init success")

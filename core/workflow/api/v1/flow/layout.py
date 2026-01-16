@@ -9,7 +9,10 @@ import json
 from typing import Annotated, AsyncGenerator, cast
 
 from fastapi import APIRouter, Depends, Header, status
+from pydantic import ValidationError
 from sqlalchemy import ColumnElement, and_
+
+from workflow.utils.validation import ValidationParse
 
 try:
     from sqlmodel import Session  # type: ignore[import]
@@ -69,6 +72,12 @@ def add(
                         WorkflowDSL.model_validate(flow.data.get("data")), current_span
                     )
                     current_span.add_info_event("Protocol validation end")
+                except ValidationError as err:
+                    current_span.record_exception(err)
+                    raise CustomException(
+                        err_code=CodeEnum.PARAM_ERROR,
+                        err_msg=ValidationParse.validation_error(err),
+                    )
                 except CustomException as err:
                     current_span.record_exception(err)
                     raise err
@@ -111,11 +120,11 @@ def get(flow_read: FlowRead, session: Session = Depends(get_session)) -> JSONRes
             current_span.record_exception(err)
             return Resp.error(err.code, err.message, span.sid)
         except Exception as e:
-            m.in_error_count(CodeEnum.FLOW_GET_ERROR.code, span=current_span)
+            m.in_error_count(CodeEnum.PROTOCOL_GET_ERROR.code, span=current_span)
             current_span.record_exception(e)
             return Resp.error(
-                CodeEnum.FLOW_GET_ERROR.code,
-                CodeEnum.FLOW_GET_ERROR.msg,
+                CodeEnum.PROTOCOL_GET_ERROR.code,
+                CodeEnum.PROTOCOL_GET_ERROR.msg,
                 span.sid,
             )
         m.in_success_count()
@@ -289,11 +298,11 @@ def get_flow_info(
                 span.sid,
             )
         except Exception as e:
-            m.in_error_count(CodeEnum.FLOW_GET_ERROR.code, span=current_span)
+            m.in_error_count(CodeEnum.PROTOCOL_GET_ERROR.code, span=current_span)
             current_span.record_exception(e)
             return Resp.error(
-                CodeEnum.FLOW_GET_ERROR.code,
-                CodeEnum.FLOW_GET_ERROR.msg,
+                CodeEnum.PROTOCOL_GET_ERROR.code,
+                CodeEnum.PROTOCOL_GET_ERROR.msg,
                 span.sid,
             )
         m.in_success_count()

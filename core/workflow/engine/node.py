@@ -809,6 +809,17 @@ class NodeFactory:
                 if item_checker and not all(item_checker(item) for item in value):
                     return False
 
+        # Special handling for object type properties checking
+        if expected_type == "object" and "properties" in schema:
+            properties = schema["properties"]
+            for prop_name, prop_schema in properties.items():
+                if prop_name in value:
+                    prop_type = prop_schema.get("type")
+                    if prop_type and not NodeFactory._check_type_match(
+                        value[prop_name], prop_type, prop_schema
+                    ):
+                        return False
+
         return True
 
     @staticmethod

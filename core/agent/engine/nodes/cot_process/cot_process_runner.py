@@ -2,7 +2,7 @@ import json
 from typing import AsyncIterator
 
 # Use unified common package import module
-from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.log_trace.node_trace_log import NodeTraceLog
 from common.otlp.trace.span import Span
 from pydantic import Field
 
@@ -28,7 +28,7 @@ class CotProcessRunner(RunnerBase):
         self,
         scratchpad: Scratchpad,
         span: Span,
-        node_trace: NodeTrace,
+        node_trace_log: NodeTraceLog,
     ) -> AsyncIterator[AgentResponse]:
         """Use CoT process for thinking and answering"""
 
@@ -74,5 +74,5 @@ class CotProcessRunner(RunnerBase):
                 {"role": "user", "content": user_prompt},
             ]
 
-            async for chunk in self.model_general_stream(messages, sp, node_trace):
+            async for chunk in self.model_general_stream(messages, sp, node_trace_log):
                 yield chunk

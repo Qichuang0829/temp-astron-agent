@@ -906,6 +906,7 @@ class QuestionAnswerNode(BaseLLMNode):
         callbacks = cast(ChatCallBacks, kwargs.get("callbacks"))
         self.start_time = time.time()
         self.timeout = self.timeout * 60  # Convert timeout from minutes to seconds
+        question_template: str = self.question
         try:
             # Process question content
             self.question = prompt_template_replace(
@@ -1014,6 +1015,7 @@ class QuestionAnswerNode(BaseLLMNode):
                     outputs=outputs,
                 )
             EventRegistry().on_interrupt_node_end(event_id=self.event_id)
+            self.question = question_template
             return node_res
 
         except CustomException as e:

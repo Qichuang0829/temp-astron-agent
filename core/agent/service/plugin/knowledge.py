@@ -42,15 +42,17 @@ async def chunk_query(
             )
             return empty_resp
 
-        try:
-            query_url = os.getenv("CHUNK_QUERY_URL")
-            if not query_url:
-                raise KnowledgeQueryExc("CHUNK_QUERY_URL is not set")
-            async with aiohttp.ClientSession() as session:
-                timeout = aiohttp.ClientTimeout(total=40)
-                async with session.post(
-                    query_url, json=data, timeout=timeout
-                ) as response:
+            try:
+                query_url = os.getenv("CHUNK_QUERY_URL")
+                if not query_url:
+                    raise KnowledgeQueryExc("CHUNK_QUERY_URL is not set")
+                async with aiohttp.ClientSession() as session:
+                    timeout = aiohttp.ClientTimeout(
+                        total=int(os.getenv("KNOWLEDGE_CALL_TIMEOUT", "90"))
+                    )
+                    async with session.post(
+                        query_url, json=data, timeout=timeout
+                    ) as response:
 
                     sp.add_info_events({"response-data": str(await response.read())})
 
