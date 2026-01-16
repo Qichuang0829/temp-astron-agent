@@ -4,7 +4,7 @@ from typing import Any, AsyncGenerator
 # Use unified common package import module
 from common.otlp.log_trace.node_log import Data as NodeData
 from common.otlp.log_trace.node_log import NodeLog as Node
-from common.otlp.log_trace.node_trace_log import NodeTraceLog as NodeTrace
+from common.otlp.log_trace.node_trace_log import NodeTraceLog
 from common.otlp.trace.span import Span
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,15 +38,17 @@ class DebugChatRunner(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     async def run(
-        self, span: Span, node_trace: NodeTrace
+        self, span: Span, node_trace_log: NodeTraceLog
     ) -> AsyncGenerator[BotDebugChatCompletionChunk, None]:
         """Execute"""
 
-        async for message in self.bot_runner.run(span, node_trace):
-            yield await self.convert_message(message, span=span, node_trace=node_trace)
+        async for message in self.bot_runner.run(span, node_trace_log):
+            yield await self.convert_message(
+                message, span=span, node_trace_log=node_trace_log
+            )
 
     async def convert_message(
-        self, message: BotAgentResponse, span: Span, node_trace: NodeTrace
+        self, message: BotAgentResponse, span: Span, node_trace_log: NodeTraceLog
     ) -> BotDebugChatCompletionChunk:
         """Convert BotAgentResponse to return frame"""
 
@@ -58,7 +60,7 @@ class DebugChatRunner(BaseModel):
         )
 
         if message.typ == "tool_call":
-            await self._handle_tool_call(chunk, message, span, node_trace)
+            await self._handle_tool_call(chunk, message, span, node_trace_log)
         elif message.typ == "tool_call_result":
             self._handle_tool_call_result(chunk, message)
 
@@ -88,7 +90,7 @@ class DebugChatRunner(BaseModel):
         chunk: BotDebugChatCompletionChunk,
         message: BotAgentResponse,
         span: Span,
-        node_trace: NodeTrace,
+        node_trace_log: NodeTraceLog,
     ) -> None:
         """Handle CoT step"""
 
@@ -108,13 +110,13 @@ class DebugChatRunner(BaseModel):
         except Exception as e:
             raise e
 
-        # self._handle_plugin_trace(content, span, node_trace)
+        # self._handle_plugin_trace(content, span, node_trace_log)
 
     def _handle_plugin_trace(
         self,
         content: BotCotStep,
         span: Span,
-        node_trace: NodeTrace,
+        node_trace_log: NodeTraceLog,
     ) -> None:
         """Handle plugin trace"""
         called_plugin = getattr(content, "plugin", None)
@@ -130,7 +132,7 @@ class DebugChatRunner(BaseModel):
         end_time = getattr(run_result, "end_time", 0)
         thought = getattr(content, "thought", "") if hasattr(content, "thought") else ""
 
-        node_trace.trace.append(
+        node_trace_log.trace.append(
             UpdatedNode(
                 id=getattr(run_result, "sid", ""),
                 sid=span.sid,

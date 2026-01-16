@@ -72,49 +72,17 @@ class CustomChatCompletion(CompletionBase):
             async for response in self.run_runner(node_trace, meter, span=sp):
                 yield response
 
-    async def run_runner(
-        self, node_trace: NodeTrace, meter: Meter, span: Span
-    ) -> AsyncGenerator[str, None]:
-        with span.start("RunRunner") as sp:
-            error: BaseExc = AgentNormalExc()
-            error_log: str = ""
-            chunk_logs: List[str] = []
-
-            try:
-                runner = await self.build_runner(sp)
-                if runner is None:
-                    raise AgentInternalExc("Failed to build runner")
-
-                async for chunk in runner.run(span=sp, node_trace=node_trace):
-                    chunk.id = span.sid
-                    async for processed_chunk in self.create_sse_chunk(
-                        chunk, chunk_logs
-                    ):
-                        yield processed_chunk
-
-            except BaseExc as e:
-                error = e
-                error_log = traceback.format_exc()
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                error = AgentInternalExc(str(e))
-                error_log = traceback.format_exc()
-
-            finally:
-                context = RunContext(
-                    error=error,
-                    error_log=error_log,
-                    chunk_logs=chunk_logs,
-                    span=sp,
-                    node_trace=node_trace,
-                    meter=meter,
-                )
-                async for final_chunk in self._finalize_run(context):
-                    yield final_chunk
-
-        # return await super().run_runner(node_trace, meter, span)
-
     async def create_sse_chunk(
         self, chunk: BotDebugChatCompletionChunk, chunk_logs: List[str]
+    ) -> AsyncGenerator[str, None]:
+        frame_data = chunk.model_dump_json()
+        frame = f"data: {frame_data}\n\n"
+        chunk_logs.append(frame_data)
+        yield frame
+
+
+    async def _process_chunk(
+        self, chunk: Any, chunk_logs: List[str]
     ) -> AsyncGenerator[str, None]:
         frame_data = chunk.model_dump_json()
         frame = f"data: {frame_data}\n\n"
